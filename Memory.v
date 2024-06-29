@@ -23,7 +23,7 @@ wire [31:0] pc_M;
 wire [31:0] alu_result_M;
 wire        gr_we_M;
 wire [ 4:0] dest_M;
-wire        res_from_mem_M;
+wire [ 3:0] res_from_mem_M;
 
 assign {pc_M,alu_result_M,gr_we_M,dest_M,res_from_mem_M} = EM_BUS_M;
 
@@ -49,8 +49,10 @@ end
 //data sram read manage
 wire  [31:0] mem_result_M;
 wire  [31:0] final_result_M;
-assign mem_result_M   = data_sram_rdata;
-assign final_result_M = res_from_mem_M ? mem_result_M : alu_result_M;
+assign mem_result_M   = res_from_mem_M[3] ? data_sram_rdata : 
+                        res_from_mem_M[1] ? res_from_mem_M[2] ? {16'b0,data_sram_rdata[15:0]} : {{16{data_sram_rdata[15]}},data_sram_rdata[15:0]} :
+                        res_from_mem_M[0] ? res_from_mem_M[2] ? {24'b0,data_sram_rdata[ 7:0]} : {{24{data_sram_rdata[ 7]}},data_sram_rdata[ 7:0]} : 32'b0;
+assign final_result_M = |res_from_mem_M ? mem_result_M : alu_result_M;
 
 //MW BUS
 assign MW_BUS = {pc_M,final_result_M,gr_we_M,dest_M};

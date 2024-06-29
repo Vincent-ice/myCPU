@@ -28,9 +28,9 @@ wire [31:0] alu_src1_E;
 wire [31:0] alu_src2_E;
 wire [31:0] rkd_value_E;
 wire        gr_we_E;
-wire        mem_we_E;
+wire [ 3:0] mem_we_E;
 wire [ 4:0] dest_E;
-wire        res_from_mem_E;
+wire [ 3:0] res_from_mem_E;
 wire        stall;
 
 assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E} = DE_BUS_E;
@@ -68,8 +68,8 @@ alu u_alu(
     );
 
 //data sram manage
-assign data_sram_en    = E_valid && (mem_we_E | res_from_mem_E);
-assign data_sram_we    = {4{mem_we_E && E_valid}};
+assign data_sram_en    = E_valid && (|mem_we_E || |res_from_mem_E);
+assign data_sram_we    = E_valid & mem_we_E;
 assign data_sram_addr  = alu_result_E;
 assign data_sram_wdata = rkd_value_E;
 
