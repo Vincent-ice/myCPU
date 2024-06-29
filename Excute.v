@@ -23,7 +23,7 @@ module Excute (
 //DE BUS
 reg [`DE_BUS_Wid-1:0] DE_BUS_E;
 wire [31:0] pc_E;
-wire [11:0] alu_op_E;
+wire [`alu_op_Wid-1:0] alu_op_E;
 wire [31:0] alu_src1_E;
 wire [31:0] alu_src2_E;
 wire [31:0] rkd_value_E;
@@ -31,14 +31,15 @@ wire        gr_we_E;
 wire        mem_we_E;
 wire [ 4:0] dest_E;
 wire        res_from_mem_E;
+wire        stall;
 
 assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E} = DE_BUS_E;
 
 //pipeline handshake
 reg    E_valid;
 wire   E_ready_go     = 1'b1;
-assign E_allowin      = !E_valid || E_ready_go && M_allowin;
-assign EM_valid       = E_valid && E_ready_go;
+assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall;
+assign EM_valid       = E_valid && E_ready_go && !stall;
 always @(posedge clk) begin
     if (!rstn) begin
         E_valid <= 1'b0;
@@ -57,10 +58,13 @@ end
 wire [31:0] alu_result_E;
 
 alu u_alu(
+    .clk          (clk         ),
+    .rstn         (rstn        ),
     .alu_op       (alu_op_E    ),
     .alu_src1     (alu_src1_E  ),
     .alu_src2     (alu_src2_E  ),
-    .alu_result   (alu_result_E)
+    .alu_result   (alu_result_E),
+    .div_stall    (stall       )
     );
 
 //data sram manage

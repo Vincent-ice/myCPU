@@ -23,7 +23,7 @@ module Decode (
 
 
 //inst
-wire [31:0] inst_D = inst_sram_rdata;
+wire [31:0] inst_D = rstn ? inst_sram_rdata : 32'b0;
 
 wire [ 5:0] op_31_26 = inst_D[31:26];
 wire [ 3:0] op_25_22 = inst_D[25:22];
@@ -140,8 +140,8 @@ assign alu_op[18] = inst_mod_wu;
 
 //dataflow control manage
 wire need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui |
-                   inst_andi | inst_ori | inst_xori;
+wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui;
+wire need_si12u =  inst_andi | inst_ori | inst_xori;
 wire need_si16  =  inst_jirl | inst_beq | inst_bne;
 wire need_si20  =  inst_lu12i_w | inst_pcaddu12i;
 wire need_si26  =  inst_b | inst_bl;
@@ -151,6 +151,7 @@ wire src2_is_4  =  inst_jirl | inst_bl;
 wire [31:0] imm;
 assign imm = src2_is_4 ? 32'h4                      :
              need_si20 ? {i20[19:0], 12'b0}         :
+             need_si12u? {20'b0, i12[11:0]}         :
 /*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
  
 

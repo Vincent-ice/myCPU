@@ -41,9 +41,11 @@ end
 reg  [31:0] pc_reg;
 wire [31:0] pc_next;
 wire        pc_en;
+wire [31:0] pc_plus4 = pc_reg + 32'd4;
 
 assign pc_en = F_valid_next && F_allowin;
-assign pc_next = br_taken ? br_target : pc_reg + 32'd4;
+assign pc_next = br_taken ? F_valid ? br_target : pc_plus4
+                          : pc_plus4;
 
 always @(posedge clk) begin
     if(!rstn)begin

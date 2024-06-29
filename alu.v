@@ -130,13 +130,9 @@ divCore_srt2 u_divCore_srt2(
   .quo_o   (quo          ),
   .ready   (div_ready    )
 );
-assign div_stall = ~div_ready;
+assign div_stall = ~div_ready || ~div_ready_delay;
 always @(posedge clk ) begin
-  if (!rstn) begin
-    div_ready_delay <= 1'b0;
-  end else begin
     div_ready_delay <= div_ready;
-  end
 end
 
   // div result history
@@ -147,21 +143,30 @@ reg [31:0] quo_history [7:0];
 reg        sign_history[7:0];
 reg [ 3:0] tag;
 
+integer n = 0;
 always @(posedge clk) begin
   if (!rstn) begin
     tag <= 4'b0;
+    while (n < 8) begin
+      op1_history[n] <= 32'b0;
+      op2_history[n] <= 32'b0;
+      rem_history[n] <= 32'b0;
+      quo_history[n] <= 32'b0;
+      sign_history[n]<= 1'b0;
+      n = n + 1;   
+    end
   end
 end
 
-always @(posedge div_en) begin
+always @(posedge div_ready_delay) begin
+  if (rstn) begin
+    tag              <= tag + 1;
     op1_history[tag] <= alu_src1;
     op2_history[tag] <= alu_src2;
     sign_history[tag]<= div_sign;
-end
-always @(posedge div_ready_delay) begin
-    tag              <= tag + 1;
     rem_history[tag] <= rem_result;
-    quo_history[tag] <= quo_result;
+    quo_history[tag] <= quo_result;    
+  end
 end
 
 wire [7:0] find_buff ;
