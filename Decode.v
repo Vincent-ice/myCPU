@@ -104,14 +104,24 @@ wire inst_addi_w = op_31_26_d[6'h00] & op_25_22_d[4'ha];
 wire inst_andi   = op_31_26_d[6'h00] & op_25_22_d[4'hd]; 
 wire inst_ori    = op_31_26_d[6'h00] & op_25_22_d[4'he]; 
 wire inst_xori   = op_31_26_d[6'h00] & op_25_22_d[4'hf]; 
-wire inst_ld_w   = op_31_26_d[6'h0a] & op_25_22_d[4'h2];
-wire inst_st_w   = op_31_26_d[6'h0a] & op_25_22_d[4'h6];
 wire inst_pcaddu12i= op_31_26_d[6'h7] & ~inst_D[25];
 wire inst_jirl   = op_31_26_d[6'h13];
 wire inst_b      = op_31_26_d[6'h14];
 wire inst_bl     = op_31_26_d[6'h15];
 wire inst_beq    = op_31_26_d[6'h16];
 wire inst_bne    = op_31_26_d[6'h17];
+wire inst_blt    = op_31_26_d[6'h18];
+wire inst_bge    = op_31_26_d[6'h19];
+wire inst_bltu   = op_31_26_d[6'h1a];
+wire inst_bgeu   = op_31_26_d[6'h1b];
+wire inst_ld_b   = op_31_26_d[6'h0a] & op_25_22_d[4'h0];
+wire inst_ld_h   = op_31_26_d[6'h0a] & op_25_22_d[4'h1];
+wire inst_ld_bu  = op_31_26_d[6'h0a] & op_25_22_d[4'h8];
+wire inst_ld_hu  = op_31_26_d[6'h0a] & op_25_22_d[4'h9];
+wire inst_ld_w   = op_31_26_d[6'h0a] & op_25_22_d[4'h2];
+wire inst_st_b   = op_31_26_d[6'h0a] & op_25_22_d[4'h4];
+wire inst_st_h   = op_31_26_d[6'h0a] & op_25_22_d[4'h5];
+wire inst_st_w   = op_31_26_d[6'h0a] & op_25_22_d[4'h6];
 wire inst_lu12i_w= op_31_26_d[6'h05] & ~inst_D[25];
 
 //alu_op manage
@@ -140,9 +150,10 @@ assign alu_op[18] = inst_mod_wu;
 
 //dataflow control manage
 wire need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui;
+wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui |
+                   inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu | inst_st_b | inst_st_h;
 wire need_si12u =  inst_andi | inst_ori | inst_xori;
-wire need_si16  =  inst_jirl | inst_beq | inst_bne;
+wire need_si16  =  inst_jirl | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 wire need_si20  =  inst_lu12i_w | inst_pcaddu12i;
 wire need_si26  =  inst_b | inst_bl;
 wire src2_is_4  =  inst_jirl | inst_bl;
@@ -161,7 +172,13 @@ wire   src2_is_imm   = inst_slli_w |
                        inst_srli_w |
                        inst_srai_w |
                        inst_addi_w |
+                       inst_ld_b   |
+                       inst_ld_bu  |
+                       inst_ld_h   |
+                       inst_ld_hu  |
                        inst_ld_w   |
+                       inst_st_b   |
+                       inst_st_h   |
                        inst_st_w   |
                        inst_lu12i_w|
                        inst_jirl   |
@@ -172,11 +189,17 @@ wire   src2_is_imm   = inst_slli_w |
                        inst_andi   |
                        inst_ori    |
                        inst_xori   ;
-wire   res_from_mem  = inst_ld_w;
-wire   dst_is_r1     = inst_bl;
-wire   gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_D;
-wire   mem_we        = inst_st_w;
-wire [4:0] dest      = dst_is_r1 ? 5'd1 : rd;
+wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
+                           inst_ld_b  ? 4'b0001 :
+                           inst_ld_bu ? 4'b0101 :
+                           inst_ld_h  ? 4'b0011 :
+                           inst_ld_hu ? 4'b0111 : 4'b0000;
+wire       dst_is_r1     = inst_bl;
+wire       gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_D;
+wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
+                           inst_st_b ? 4'b0001 :
+                           inst_st_h ? 4'b0011 : 4'b0000;
+wire [4:0] dest          = dst_is_r1 ? 5'd1 : rd;
 
 //regfile data manage
 wire [ 4:0] rf_raddr1 = rj;
@@ -224,17 +247,30 @@ assign rkd_value =  rf_raddr2                ?
 
 //branch manage
 wire        rj_eq_rd;
+wire        rj_lt_rd;
+wire        rj_ltu_rd;
+wire [31:0] out;
+wire        sign_bit;
 wire        br_taken;
 wire [31:0] br_target;
 wire [31:0] br_offs;
 wire [31:0] jirl_offs;
 
+assign {sign_bit, out} = {1'b0, rj_value} + {1'b1, ~rkd_value} + 33'd1;
 assign rj_eq_rd = (rj_value == rkd_value);
+assign overflow = (rj_value[31] ^ rkd_value[31]) & (rj_value[31] ^ out[31]);
+assign rj_eq_rd = (rj_value == rkd_value);
+assign rj_lt_rd = out[31] ^ overflow;
+assign rj_ltu_rd= sign_bit;
 assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bne  && !rj_eq_rd
                    || inst_jirl
                    || inst_bl
                    || inst_b
+                   || inst_blt  &&  rj_lt_rd
+                   || inst_bge  && !rj_lt_rd
+                   || inst_bltu &&  rj_ltu_rd
+                   || inst_bgeu && !rj_ltu_rd
                   ) && rstn;
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
@@ -248,7 +284,7 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (pc_D + br_offs
 wire  [31:0] alu_src1;
 wire  [31:0] alu_src2;
 assign alu_src1 = src1_is_pc  ? pc_D[31:0] : rj_value;
-assign alu_src2 = src2_is_imm ? imm : (inst_bl ? 32'd4 : rkd_value);
+assign alu_src2 = src2_is_imm ? imm : rkd_value;
 //output manage
 assign Branch_BUS = {br_taken,br_target};
 assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem};
