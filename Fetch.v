@@ -63,7 +63,7 @@ end
 
 //exception manage
 assign      ex_F       = |pc_next[1:0] && F_valid_next;
-wire [ 5:0] ecode_F    = ex_F ? `ECODE_ADEF : 6'h00;
+wire [ 7:0] ecode_F    = ex_F ? `ECODE_ADEF : 8'h00;
 wire        esubcode_F = `ESUBCODE_ADEF;
 
 //FD BUS

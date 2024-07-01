@@ -25,7 +25,7 @@ wire        gr_we_W;
 wire [ 4:0] dest_W;
 wire [31:0] vaddr_W;
 wire        ex_W;
-wire [ 5:0] ecode_W;
+wire [ 7:0] ecode_W;
 wire        esubcode_W;
 wire [13:0] csr_addr_W;
 wire        csr_we_W;

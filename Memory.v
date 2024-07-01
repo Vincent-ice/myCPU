@@ -26,7 +26,7 @@ wire [ 4:0] dest_M;
 wire [ 3:0] res_from_mem_M;
 wire [31:0] vaddr_M;
 wire        ex_M;
-wire [ 5:0] ecode_M;
+wire [ 7:0] ecode_M;
 wire        esubcode_M;
 wire [13:0] csr_addr_M;
 wire        csr_we_M;

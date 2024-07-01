@@ -7,6 +7,7 @@ module Decode (
     input [`FD_BUS_Wid-1:0]         FD_BUS,
 
     input [31:0]                    inst_sram_rdata,
+    input [ 7:0]                    hardware_interrupt,
     
     input                           E_allowin,
     output                          D_allowin,
@@ -56,7 +57,7 @@ reg  [`FD_BUS_Wid-1:0] FD_BUS_D;
 wire        pc_en_D;
 wire [31:0] pc_D;
 wire        ex_F;
-wire [ 5:0] ecode_F;
+wire [ 7:0] ecode_F;
 wire        esubcode_D;
 
 assign {pc_D,pc_en_D,ex_F,ecode_F,esubcode_D} = FD_BUS_D;
@@ -142,11 +143,17 @@ wire inst_ertn   = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_
 wire inst_break  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h14];
 wire inst_syscall= op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h16]; 
 
+wire inst_rdcntid   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h18] & (rd==5'b00);
+wire inst_rdcntvl_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h18] & (rj==5'b00);
+wire inst_rdcntvh_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h19] & (rj==5'b00);
+
+/* don't forget add the inst to the wire 'unknownInst' at last */
+
 //alu_op manage
 wire [`alu_op_Wid-1:0] alu_op;
 
-assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w
-                    | inst_jirl | inst_bl | inst_pcaddu12i;
+assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w |
+                    inst_jirl | inst_bl | inst_pcaddu12i | inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w;
 assign alu_op[ 1] = inst_sub_w;
 assign alu_op[ 2] = inst_slt | inst_slti;
 assign alu_op[ 3] = inst_sltu | inst_sltui;
@@ -221,7 +228,8 @@ wire       gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
-wire [4:0] dest          = dst_is_r1 ? 5'd1 : rd;
+wire [4:0] dest          = dst_is_r1    ? 5'd1 : 
+                           inst_rdcntid ? rj   : rd;
 
 //regfile data manage
 wire [ 4:0] rf_raddr1 = rj;
@@ -280,10 +288,12 @@ wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
 wire        ex_en_W;
-wire [ 5:0] ecode_W;
+wire [ 7:0] ecode_W;
 wire [ 3:0] esubcode_W;
 wire [31:0] pc_W;
 wire [31:0] vaddr_W;
+wire [63:0] counter;
+wire [31:0] counterID;
 assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
 assign ertn_flush = inst_ertn && D_valid;
 assign ex_en      = ex_en_W;
@@ -302,8 +312,13 @@ csrReg u_csrReg(
     .esubcode  (esubcode_W),
     .pc        (pc_W      ),
     .vaddr     (vaddr_W   ),
+    .hardware_interrupt(hardware_interrupt),
+    .has_int   (has_int   ),
+    .int_ecode (int_ecode ),
     .new_pc    (new_pc    ),
-    .ex_entryPC(ex_entryPC)
+    .ex_entryPC(ex_entryPC),
+    .counter   (counter   ),
+    .counterID (counterID )
 );
 
 //branch manage
@@ -344,16 +359,30 @@ assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (pc_D + br_offs
 //alu data input manage
 wire  [31:0] alu_src1;
 wire  [31:0] alu_src2;
-assign alu_src1 = src1_is_pc  ? pc_D[31:0] : rj_value;
-assign alu_src2 = src2_is_imm ? imm : rkd_value;
+assign alu_src1 = src1_is_pc     ? pc_D[31:0]     :
+                  inst_rdcntid   ? counterID      :
+                  inst_rdcntvl_w ? counter[31:0]  : 
+                  inst_rdcntvh_w ? counter[63:32] : rj_value;
+assign alu_src2 = src2_is_imm                                    ? imm   :
+                  inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w ? 32'b0 : rkd_value;
 
 //exception manage
-wire       ex_D    = (ex_F || D_ready_go & (inst_syscall | inst_break)) && D_valid;
-wire [5:0] ecode_D = ~D_valid     ? 6'b0       :
+wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu && ~inst_nor && ~inst_and && ~inst_or && ~inst_xor && 
+                         ~inst_sll_w && ~inst_srl_w && ~inst_sra_w && ~inst_mul_w && ~inst_mulh_w && ~inst_mulh_wu && ~inst_div_w && 
+                         ~inst_mod_w && ~inst_div_wu && ~inst_mod_wu && ~inst_slli_w && ~inst_srli_w && ~inst_srai_w && ~inst_slti && 
+                         ~inst_sltui && ~inst_addi_w && ~inst_andi && ~inst_ori && ~inst_xori && ~inst_pcaddu12i && ~inst_jirl && 
+                         ~inst_b && ~inst_bl && ~inst_beq && ~inst_bne && ~inst_blt && ~inst_bge && ~inst_bltu && ~inst_bgeu && 
+                         ~inst_ld_b && ~inst_ld_h && ~inst_ld_bu && ~inst_ld_hu && ~inst_ld_w && ~inst_st_b && ~inst_st_h && ~inst_st_w && 
+                         ~inst_lu12i_w && ~inst_csrrd && ~inst_csrwr && ~inst_csrxchg && ~inst_ertn && ~inst_break && ~inst_syscall &&
+                         ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w;
+wire       ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
+wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
+                     has_int      ? int_ecode  :
                      ex_F         ? ecode_F    :
                      inst_syscall ? `ECODE_SYS :
                      inst_ertn    ? `ECODE_ERTN:
-                     inst_break   ? `ECODE_BRK : 6'b0;
+                     inst_break   ? `ECODE_BRK :
+                     unknownInst  ? `ECODE_INE : 8'b0;
 //output manage
 assign Branch_BUS = {br_taken,br_target};
 assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem,

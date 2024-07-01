@@ -33,7 +33,7 @@ wire [ 4:0] dest_E;
 wire [ 3:0] res_from_mem_E;
 wire        stall;
 wire        ex_D;
-wire [ 5:0] ecode_D;
+wire [ 7:0] ecode_D;
 wire        esubcode_D;
 wire [13:0] csr_addr_E;
 wire        csr_we_E;
@@ -87,11 +87,11 @@ assign data_sram_wdata = rkd_value_E;
 wire        ADEM       = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
                          ((mem_we_E[1] | res_from_mem_E[1])&( data_sram_addr[0]  ));
 wire        ex_E       = E_valid && (ex_D | ADEM);
-wire [5:0]  ecode_E    = ~E_valid ? 6'h00       :
+wire [7:0]  ecode_E    = ~E_valid ? 8'h00       :
                          ex_D     ? ecode_D     :
-                         ADEM     ? `ECODE_ADEM : 6'b0;
-wire        esubcode_E= ex_D     ? esubcode_D  :
-                         ADEM     ? `ESUBCODE_ADEM : 4'b0;
+                         ADEM     ? `ECODE_ADEM : 8'b0;
+wire        esubcode_E = ex_D     ? esubcode_D  :
+                         ADEM     ? `ESUBCODE_ADEM : 1'b0;
 
 //regfile wdata from csr
 wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
