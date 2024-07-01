@@ -9,6 +9,7 @@ module Writeback (
     input  [`MW_BUS_Wid-1:0]    MW_BUS,
 
     output [`Wrf_BUS_Wid-1:0]   Wrf_BUS,
+    output [`Wcsr_BUS_Wid-1:0]  Wcsr_BUS,
 
     output [31:0]               debug_wb_pc,
     output [3:0]                debug_wb_rf_we,
@@ -22,8 +23,17 @@ wire [31:0] pc_W;
 wire [31:0] final_result_W;
 wire        gr_we_W;
 wire [ 4:0] dest_W;
+wire [31:0] vaddr_W;
+wire        ex_W;
+wire [ 5:0] ecode_W;
+wire        esubcode_W;
+wire [13:0] csr_addr_W;
+wire        csr_we_W;
+wire [31:0] csr_wmask_W;
+wire [31:0] csr_wdata_W;
 
-assign {pc_W,final_result_W,gr_we_W,dest_W} = MW_BUS_W;
+assign {pc_W,final_result_W,gr_we_W,dest_W,vaddr_W,
+        ex_W,ecode_W,esubcode_W,csr_addr_W,csr_we_W,csr_wmask_W,csr_wdata_W} = MW_BUS_W;
 
 //pipeline handshake
 reg    W_valid;
@@ -45,6 +55,9 @@ end
 
 //Wrf BUS
 assign Wrf_BUS = {gr_we_W && W_valid,dest_W,final_result_W};
+
+//Wcsr BUS
+assign Wcsr_BUS = {ex_W && W_valid,ecode_W,esubcode_W,csr_we_W && W_valid,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W};
     
 // debug info generate
 assign debug_wb_pc       = pc_W;

@@ -1,15 +1,43 @@
-`define FD_BUS_Wid      32+1
-`define DE_BUS_Wid      32+`alu_op_Wid+32+32+32+1+4+5+4
-`define EM_BUS_Wid      32+32+1+5+4
-`define MW_BUS_Wid      32+32+1+5
+`define FD_BUS_Wid      32+1+1+6+1
+`define DE_BUS_Wid      32+`alu_op_Wid+32+32+32+1+4+5+4+1+6+1+14+1+32+32+32+1
+`define EM_BUS_Wid      32+32+1+5+4+32+1+6+1+14+1+32+32
+`define MW_BUS_Wid      32+32+1+5+32+1+6+1+14+1+32+32
 `define Branch_BUS_Wid  32+1
 `define Wrf_BUS_Wid     32+1+5+32
+`define Wcsr_BUS_Wid    1+6+1+1+14+32+32+32+32
 `define ED_for_BUS_Wid  1+5+32
 `define MD_for_BUS_Wid  5+32
 
 `define alu_op_Wid      19
 
-`define DCP0_BUS_Wid    
-`define CP0D_BUS_Wid    
-`define CP0E_BUS_Wid    
-`define WCP0_BUS_Wid    
+`define TLBNUM          16
+
+`define ECODE_PIL       6'h01
+`define ECODE_PIS       6'h02
+`define ECODE_PIF       6'h03
+`define ECODE_PME       6'h04
+`define ECODE_PNR       6'h05
+`define ECODE_PNX       6'h06
+`define ECODE_PPI       6'h07
+`define ECODE_ADEF      6'h08
+`define ESUBCODE_ADEF   1'b0
+`define ECODE_ADEM      6'h08
+`define ESUBCODE_ADEM   1'b1
+`define ECODE_ALE       6'h09
+`define ECODE_BCE       6'h0a
+`define ECODE_SYS       6'h0b
+`define ECODE_BRK       6'h0c
+`define ECODE_INE       6'h0d
+`define ECODE_IPE       6'h0e
+`define ECODE_FPD       6'h0f
+`define ECODE_SXD       6'h10
+`define ECODE_ASXD      6'h11
+`define ECODE_FPE       6'h12
+`define ESUBCODE_FPE    1'b0
+`define ECODE_VFPE      6'h12
+`define ESUBCODE_VFPE   1'b1
+`define ECODE_WPEF      6'h13
+`define ESUBCODE_WPEF   1'b0
+`define ECODE_WPEM      6'h13
+`define ESUBCODE_WPEM   1'b1
+`define ECODE_ERTN      6'h14

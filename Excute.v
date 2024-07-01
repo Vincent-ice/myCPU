@@ -32,8 +32,18 @@ wire [ 3:0] mem_we_E;
 wire [ 4:0] dest_E;
 wire [ 3:0] res_from_mem_E;
 wire        stall;
+wire        ex_D;
+wire [ 5:0] ecode_D;
+wire        esubcode_D;
+wire [13:0] csr_addr_E;
+wire        csr_we_E;
+wire [31:0] csr_rdata_E;
+wire [31:0] csr_wmask_E;
+wire [31:0] csr_wdata_E;
+wire        res_from_csr_E;
 
-assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E} = DE_BUS_E;
+assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
+        ex_D,ecode_D,esubcode_D,csr_addr_E,csr_we_E,csr_rdata,csr_wmask_E,csr_wdata_E,res_from_csr_E} = DE_BUS_E;
 
 //pipeline handshake
 reg    E_valid;
@@ -73,10 +83,24 @@ assign data_sram_we    = E_valid & mem_we_E;
 assign data_sram_addr  = alu_result_E;
 assign data_sram_wdata = rkd_value_E;
 
+//exception manage
+wire        ADEM       = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
+                         ((mem_we_E[1] | res_from_mem_E[1])&( data_sram_addr[0]  ));
+wire        ex_E       = E_valid && (ex_D | ADEM);
+wire [5:0]  ecode_E    = ~E_valid ? 6'h00       :
+                         ex_D     ? ecode_D     :
+                         ADEM     ? `ECODE_ADEM : 6'b0;
+wire        esubcode_E= ex_D     ? esubcode_D  :
+                         ADEM     ? `ESUBCODE_ADEM : 4'b0;
+
+//regfile wdata from csr
+wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
+
 //EM BUS
-assign EM_BUS = {pc_E,alu_result_E,gr_we_E,dest_E,res_from_mem_E};
+assign EM_BUS = {pc_E,rf_wdata_E,gr_we_E,dest_E,res_from_mem_E,data_sram_addr,
+                 ex_E,ecode_E,esubcode_E,csr_addr_E,csr_we_E,csr_wmask_E,csr_wdata_E};
 
 //ED forward BUS
-assign ED_for_BUS = {res_from_mem_E,dest_E & {5{E_valid && gr_we_E}},alu_result_E};
+assign ED_for_BUS = {res_from_mem_E,dest_E & {5{E_valid && gr_we_E}},rf_wdata_E};
 
 endmodule

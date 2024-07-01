@@ -14,11 +14,16 @@ module Decode (
     input [`ED_for_BUS_Wid-1:0]     ED_for_BUS,
     input [`MD_for_BUS_Wid-1:0]     MD_for_BUS,
     input [`Wrf_BUS_Wid-1:0]        Wrf_BUS,
+    input [`Wcsr_BUS_Wid-1:0]       Wcsr_BUS,
 
     output                          DE_valid,
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
-    output [`Branch_BUS_Wid-1:0]    Branch_BUS
+    output [`Branch_BUS_Wid-1:0]    Branch_BUS,
+    output                          ex_en,
+    output [31:0]                   ex_entryPC,
+    output                          ertn_flush,
+    output [31:0]                   new_pc
 );
 
 
@@ -29,6 +34,7 @@ wire [ 5:0] op_31_26 = inst_D[31:26];
 wire [ 3:0] op_25_22 = inst_D[25:22];
 wire [ 1:0] op_21_20 = inst_D[21:20];
 wire [ 4:0] op_19_15 = inst_D[19:15];
+wire [ 4:0] op_14_10 = inst_D[14:10];
 
 wire [ 4:0] rd = inst_D[ 4: 0];
 wire [ 4:0] rj = inst_D[ 9: 5];
@@ -43,13 +49,17 @@ wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
 wire [ 3:0] op_21_20_d;
 wire [31:0] op_19_15_d;
+wire [31:0] op_14_10_d;
 
 //FD BUS
 reg  [`FD_BUS_Wid-1:0] FD_BUS_D;
 wire        pc_en_D;
 wire [31:0] pc_D;
+wire        ex_F;
+wire [ 5:0] ecode_F;
+wire        esubcode_D;
 
-assign {pc_D,pc_en_D} = FD_BUS_D;
+assign {pc_D,pc_en_D,ex_F,ecode_F,esubcode_D} = FD_BUS_D;
 
 //pipeline handshake
 reg  D_valid;
@@ -76,6 +86,7 @@ decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
 decoder_4_16 u_dec1(.in(op_25_22 ), .out(op_25_22_d ));
 decoder_2_4  u_dec2(.in(op_21_20 ), .out(op_21_20_d ));
 decoder_5_32 u_dec3(.in(op_19_15 ), .out(op_19_15_d ));
+decoder_5_32 u_dec4(.in(op_14_10 ), .out(op_14_10_d ));
  
 wire inst_add_w  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h00];
 wire inst_sub_w  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h1] & op_19_15_d[5'h02];
@@ -124,6 +135,13 @@ wire inst_st_h   = op_31_26_d[6'h0a] & op_25_22_d[4'h5];
 wire inst_st_w   = op_31_26_d[6'h0a] & op_25_22_d[4'h6];
 wire inst_lu12i_w= op_31_26_d[6'h05] & ~inst_D[25];
 
+wire inst_csrrd  = op_31_26_d[6'h01] && ~inst_D[25] && ~inst_D[24] && (rj==5'b00); 
+wire inst_csrwr  = op_31_26_d[6'h01] && ~inst_D[25] && ~inst_D[24] && (rj==5'b01); 
+wire inst_csrxchg= op_31_26_d[6'h01] & ~inst_D[25] & ~inst_D[24] & ~inst_csrrd & ~inst_csrwr; 
+wire inst_ertn   = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h10] & op_14_10_d[5'h0e] && (rj==5'b00) && (rd==5'b00); 
+wire inst_break  = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h14];
+wire inst_syscall= op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h2] & op_19_15_d[5'h16]; 
+
 //alu_op manage
 wire [`alu_op_Wid-1:0] alu_op;
 
@@ -166,7 +184,9 @@ assign imm = src2_is_4 ? 32'h4                      :
 /*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
  
 
-wire   src_reg_is_rd = inst_beq | inst_bne | inst_st_w;
+wire   src_reg_is_rd = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | 
+                       inst_bgeu | inst_st_w | inst_st_b | inst_st_h| 
+                       inst_csrrd | inst_csrwr | inst_csrxchg;
 wire   src1_is_pc    = inst_jirl | inst_bl | inst_pcaddu12i;
 wire   src2_is_imm   = inst_slli_w |
                        inst_srli_w |
@@ -194,8 +214,10 @@ wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
                            inst_ld_bu ? 4'b0101 :
                            inst_ld_h  ? 4'b0011 :
                            inst_ld_hu ? 4'b0111 : 4'b0000;
+wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
-wire       gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_D;
+wire       gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_D & 
+                           ~inst_ertn;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
@@ -245,6 +267,45 @@ assign rkd_value =  rf_raddr2                ?
                      (rf_raddr2 == dest_M)   ? result_M : 
                      (rf_raddr2 == rf_waddr) && rf_we ? rf_wdata : rf_rdata2) : rf_rdata2;
 
+//CSR data manage
+wire [13:0] csr_addr     = inst_D[23:10];
+wire        csr_we       = inst_csrwr | inst_csrxchg;
+wire        csr_re       = inst_csrrd | inst_csrwr | inst_csrxchg;
+wire [31:0] csr_wmask    = {32{inst_csrxchg}} & rj_value | {32{~inst_csrxchg}};
+wire [31:0] csr_wdata    = rkd_value;
+wire [31:0] csr_rdata;
+
+wire        csr_we_W;
+wire [13:0] csr_addr_W;
+wire [31:0] csr_wmask_W;
+wire [31:0] csr_wdata_W;
+wire        ex_en_W;
+wire [ 5:0] ecode_W;
+wire [ 3:0] esubcode_W;
+wire [31:0] pc_W;
+wire [31:0] vaddr_W;
+assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
+assign ertn_flush = inst_ertn && D_valid;
+assign ex_en      = ex_en_W;
+
+csrReg u_csrReg(
+    .clk       (clk       ),
+    .rstn      (rstn      ),
+    .csr_addr  (csr_addr  ),
+    .csr_re    (csr_re    ),
+    .csr_we    (csr_we_W  ),
+    .csr_wmask (csr_wmask_W),
+    .csr_wdata (csr_wdata_W),
+    .csr_rdata (csr_rdata ),
+    .ex_en     (ex_en_W   ),
+    .ecode     (ecode_W   ),
+    .esubcode  (esubcode_W),
+    .pc        (pc_W      ),
+    .vaddr     (vaddr_W   ),
+    .new_pc    (new_pc    ),
+    .ex_entryPC(ex_entryPC)
+);
+
 //branch manage
 wire        rj_eq_rd;
 wire        rj_lt_rd;
@@ -285,8 +346,17 @@ wire  [31:0] alu_src1;
 wire  [31:0] alu_src2;
 assign alu_src1 = src1_is_pc  ? pc_D[31:0] : rj_value;
 assign alu_src2 = src2_is_imm ? imm : rkd_value;
+
+//exception manage
+wire       ex_D    = (ex_F || D_ready_go & (inst_syscall | inst_break)) && D_valid;
+wire [5:0] ecode_D = ~D_valid     ? 6'b0       :
+                     ex_F         ? ecode_F    :
+                     inst_syscall ? `ECODE_SYS :
+                     inst_ertn    ? `ECODE_ERTN:
+                     inst_break   ? `ECODE_BRK : 6'b0;
 //output manage
 assign Branch_BUS = {br_taken,br_target};
-assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem};
+assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem,
+                 ex_D,ecode_D,esubcode_D,csr_addr,csr_we,csr_rdata,csr_wmask,csr_wdata,res_from_csr};
 
 endmodule

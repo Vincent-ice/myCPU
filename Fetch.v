@@ -4,6 +4,10 @@ module Fetch (
     input                           rstn,
 
     input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
+    input                           ex_en,
+    input    [31:0]                 ex_entryPC,
+    input                           ertn_flush,
+    input    [31:0]                 new_pc,
 
     input                           D_allowin,  
 
@@ -22,10 +26,11 @@ wire [31:0] br_target;
 assign {br_taken,br_target} = Branch_BUS;
 
 //pipeline handshake
+wire ex_F;
 reg  F_valid;
 wire F_valid_next   = rstn;//next cycle valid
 wire F_ready_go     = 1'b1;//ready send to next stage
-wire F_allowin      = !F_valid || F_ready_go && D_allowin;//allow input data
+wire F_allowin      = !F_valid || ex_en || ertn_flush || F_ready_go && D_allowin && !ex_F;//allow input data
 assign FD_valid     = F_valid_next && F_ready_go;//validity of D stage
 always @(posedge clk) begin
     if (!rstn) begin
@@ -44,8 +49,9 @@ wire        pc_en;
 wire [31:0] pc_plus4 = pc_reg + 32'd4;
 
 assign pc_en = F_valid_next && F_allowin;
-assign pc_next = br_taken ? F_valid ? br_target : pc_plus4
-                          : pc_plus4;
+assign pc_next = br_taken   ? (F_valid ? br_target : pc_plus4) : 
+                 ex_en      ? ex_entryPC                       :
+                 ertn_flush ? new_pc                           : pc_plus4;
 
 always @(posedge clk) begin
     if(!rstn)begin
@@ -55,8 +61,13 @@ always @(posedge clk) begin
     end
 end
 
+//exception manage
+assign      ex_F       = |pc_next[1:0] && F_valid_next;
+wire [ 5:0] ecode_F    = ex_F ? `ECODE_ADEF : 6'h00;
+wire        esubcode_F = `ESUBCODE_ADEF;
+
 //FD BUS
-assign FD_BUS = {inst_sram_addr,pc_en};
+assign FD_BUS = {inst_sram_addr,pc_en,ex_F,ecode_F,esubcode_F};
 
 //inst sram manage
 assign inst_sram_en    = pc_en ; 
