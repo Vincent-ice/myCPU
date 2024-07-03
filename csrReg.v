@@ -4,12 +4,16 @@ module csrReg (
     input                       clk,
     input                       rstn,
 
-    input  [13:0]               csr_addr,
+    input  [13:0]               csr_raddr,
     input                       csr_re,
     input                       csr_we,
+    input  [13:0]               csr_waddr,
     input  [31:0]               csr_wmask, 
     input  [31:0]               csr_wdata,
     output [31:0]               csr_rdata,
+
+    input  [13:0]               csr_raddr_forward,
+    output [31:0]               csr_rdata_forward,
 
     input                       ex_en,
     input  [ 7:0]               ecode,
@@ -61,37 +65,37 @@ reg [31:0] csr_CTAG;    //0x98
 reg [31:0] csr_DMW0;    //0x180
 reg [31:0] csr_DMW1;    //0x181
 
-wire CRMD_we   = csr_we & (csr_addr == `CSR_CRMD);
-wire PRMD_we   = csr_we & (csr_addr == `CSR_PRMD);
-wire EUEN_we   = csr_we & (csr_addr == `CSR_EUEN);
-wire ECFG_we   = csr_we & (csr_addr == `CSR_ECFG);
-wire ESTAT_we  = csr_we & (csr_addr == `CSR_ESTAT);
-wire ERA_we    = csr_we & (csr_addr == `CSR_ERA);
-wire BADV_we   = csr_we & (csr_addr == `CSR_BADV);
-wire EENTRY_we = csr_we & (csr_addr == `CSR_EENTRY);
-wire TLBIDX_we = csr_we & (csr_addr == `CSR_TLBIDX);
-wire TLBEHI_we = csr_we & (csr_addr == `CSR_TLBEHI);
-wire TLBELO0_we= csr_we & (csr_addr == `CSR_TLBELO0);
-wire TLBELO1_we= csr_we & (csr_addr == `CSR_TLBELO1);
-wire ASID_we   = csr_we & (csr_addr == `CSR_ASID);
-wire pGDL_we   = csr_we & (csr_addr == `CSR_PGDL);
-wire PGDH_we   = csr_we & (csr_addr == `CSR_PGDH);
-wire PGD_we    = csr_we & (csr_addr == `CSR_PGD);
-wire CPUID_we  = csr_we & (csr_addr == `CSR_CPUID);
-wire SAVE0_we  = csr_we & (csr_addr == `CSR_SAVE0);
-wire SAVE1_we  = csr_we & (csr_addr == `CSR_SAVE1);
-wire SAVE2_we  = csr_we & (csr_addr == `CSR_SAVE2);
-wire SAVE3_we  = csr_we & (csr_addr == `CSR_SAVE3);
-wire TID_we    = csr_we & (csr_addr == `CSR_TID);
-wire TCFG_we   = csr_we & (csr_addr == `CSR_TCFG);
-wire TVAL_we   = csr_we & (csr_addr == `CSR_TVAL);
-wire CNTC_we   = csr_we & (csr_addr == `CSR_CNTC);
-wire TICLR_we  = csr_we & (csr_addr == `CSR_TICLR);
-wire LLBCTL_we = csr_we & (csr_addr == `CSR_LLBCTL);
-wire TLBRENTRY_we = csr_we & (csr_addr == `CSR_TLBRENTRY);
-wire CTAG_we   = csr_we & (csr_addr == `CSR_CTAG);
-wire DMW0_we   = csr_we & (csr_addr == `CSR_DMW0);
-wire DMW1_we   = csr_we & (csr_addr == `CSR_DMW1);
+wire CRMD_we   = csr_we & (csr_waddr == `CSR_CRMD);
+wire PRMD_we   = csr_we & (csr_waddr == `CSR_PRMD);
+wire EUEN_we   = csr_we & (csr_waddr == `CSR_EUEN);
+wire ECFG_we   = csr_we & (csr_waddr == `CSR_ECFG);
+wire ESTAT_we  = csr_we & (csr_waddr == `CSR_ESTAT);
+wire ERA_we    = csr_we & (csr_waddr == `CSR_ERA);
+wire BADV_we   = csr_we & (csr_waddr == `CSR_BADV);
+wire EENTRY_we = csr_we & (csr_waddr == `CSR_EENTRY);
+wire TLBIDX_we = csr_we & (csr_waddr == `CSR_TLBIDX);
+wire TLBEHI_we = csr_we & (csr_waddr == `CSR_TLBEHI);
+wire TLBELO0_we= csr_we & (csr_waddr == `CSR_TLBELO0);
+wire TLBELO1_we= csr_we & (csr_waddr == `CSR_TLBELO1);
+wire ASID_we   = csr_we & (csr_waddr == `CSR_ASID);
+wire pGDL_we   = csr_we & (csr_waddr == `CSR_PGDL);
+wire PGDH_we   = csr_we & (csr_waddr == `CSR_PGDH);
+wire PGD_we    = csr_we & (csr_waddr == `CSR_PGD);
+wire CPUID_we  = csr_we & (csr_waddr == `CSR_CPUID);
+wire SAVE0_we  = csr_we & (csr_waddr == `CSR_SAVE0);
+wire SAVE1_we  = csr_we & (csr_waddr == `CSR_SAVE1);
+wire SAVE2_we  = csr_we & (csr_waddr == `CSR_SAVE2);
+wire SAVE3_we  = csr_we & (csr_waddr == `CSR_SAVE3);
+wire TID_we    = csr_we & (csr_waddr == `CSR_TID);
+wire TCFG_we   = csr_we & (csr_waddr == `CSR_TCFG);
+wire TVAL_we   = csr_we & (csr_waddr == `CSR_TVAL);
+wire CNTC_we   = csr_we & (csr_waddr == `CSR_CNTC);
+wire TICLR_we  = csr_we & (csr_waddr == `CSR_TICLR);
+wire LLBCTL_we = csr_we & (csr_waddr == `CSR_LLBCTL);
+wire TLBRENTRY_we = csr_we & (csr_waddr == `CSR_TLBRENTRY);
+wire CTAG_we   = csr_we & (csr_waddr == `CSR_CTAG);
+wire DMW0_we   = csr_we & (csr_waddr == `CSR_DMW0);
+wire DMW1_we   = csr_we & (csr_waddr == `CSR_DMW1);
 
 reg  timer_en;
 
@@ -115,41 +119,72 @@ assign int_ecode = int[12] ? 8'd76 :
                    int[ 0] ? 8'd64 : 8'd0;
 
 //CSR rdata
-assign csr_rdata = csr_addr == `CSR_CRMD      ? csr_CRMD      :
-                   csr_addr == `CSR_PRMD      ? csr_PRMD      :
-                   csr_addr == `CSR_EUEN      ? csr_EUEN      :
-                   csr_addr == `CSR_ECFG      ? csr_ECFG      :
-                   csr_addr == `CSR_ESTAT     ? csr_ESTAT     :
-                   csr_addr == `CSR_ERA       ? csr_ERA       :
-                   csr_addr == `CSR_BADV      ? csr_BADV      :
-                   csr_addr == `CSR_EENTRY    ? csr_EENTRY    :
-                   csr_addr == `CSR_TLBIDX    ? csr_TLBIDX    :
-                   csr_addr == `CSR_TLBEHI    ? csr_TLBEHI    :
-                   csr_addr == `CSR_TLBELO0   ? csr_TLBELO0   :
-                   csr_addr == `CSR_TLBELO1   ? csr_TLBELO1   :
-                   csr_addr == `CSR_ASID      ? csr_ASID      :
-                   csr_addr == `CSR_PGDL      ? csr_PGDL      :
-                   csr_addr == `CSR_PGDH      ? csr_PGDH      :
-                   csr_addr == `CSR_PGD       ? csr_PGD       :
-                   csr_addr == `CSR_CPUID     ? csr_CPUID     :
-                   csr_addr == `CSR_SAVE0     ? csr_SAVE0     :
-                   csr_addr == `CSR_SAVE1     ? csr_SAVE1     :
-                   csr_addr == `CSR_SAVE2     ? csr_SAVE2     :
-                   csr_addr == `CSR_SAVE3     ? csr_SAVE3     :
-                   csr_addr == `CSR_TID       ? csr_TID       :
-                   csr_addr == `CSR_TCFG      ? csr_TCFG      :
-                   csr_addr == `CSR_TVAL      ? csr_TVAL      :
-                   csr_addr == `CSR_TICLR     ? 32'h0     :
-                   csr_addr == `CSR_LLBCTL    ? {csr_LLBCTL[31:1],LLbit} :
-                   csr_addr == `CSR_TLBRENTRY ? csr_TLBRENTRY :
-                   csr_addr == `CSR_CTAG      ? csr_CTAG      :
-                   csr_addr == `CSR_DMW0      ? csr_DMW0      :
-                   csr_addr == `CSR_DMW1      ? csr_DMW1      : 32'b0;
+assign csr_rdata = csr_raddr == `CSR_CRMD      ? csr_CRMD      :
+                   csr_raddr == `CSR_PRMD      ? csr_PRMD      :
+                   csr_raddr == `CSR_EUEN      ? csr_EUEN      :
+                   csr_raddr == `CSR_ECFG      ? csr_ECFG      :
+                   csr_raddr == `CSR_ESTAT     ? csr_ESTAT     :
+                   csr_raddr == `CSR_ERA       ? csr_ERA       :
+                   csr_raddr == `CSR_BADV      ? csr_BADV      :
+                   csr_raddr == `CSR_EENTRY    ? csr_EENTRY    :
+                   csr_raddr == `CSR_TLBIDX    ? csr_TLBIDX    :
+                   csr_raddr == `CSR_TLBEHI    ? csr_TLBEHI    :
+                   csr_raddr == `CSR_TLBELO0   ? csr_TLBELO0   :
+                   csr_raddr == `CSR_TLBELO1   ? csr_TLBELO1   :
+                   csr_raddr == `CSR_ASID      ? csr_ASID      :
+                   csr_raddr == `CSR_PGDL      ? csr_PGDL      :
+                   csr_raddr == `CSR_PGDH      ? csr_PGDH      :
+                   csr_raddr == `CSR_PGD       ? csr_PGD       :
+                   csr_raddr == `CSR_CPUID     ? csr_CPUID     :
+                   csr_raddr == `CSR_SAVE0     ? csr_SAVE0     :
+                   csr_raddr == `CSR_SAVE1     ? csr_SAVE1     :
+                   csr_raddr == `CSR_SAVE2     ? csr_SAVE2     :
+                   csr_raddr == `CSR_SAVE3     ? csr_SAVE3     :
+                   csr_raddr == `CSR_TID       ? csr_TID       :
+                   csr_raddr == `CSR_TCFG      ? csr_TCFG      :
+                   csr_raddr == `CSR_TVAL      ? csr_TVAL      :
+                   csr_raddr == `CSR_TICLR     ? 32'h0     :
+                   csr_raddr == `CSR_LLBCTL    ? {csr_LLBCTL[31:1],LLbit} :
+                   csr_raddr == `CSR_TLBRENTRY ? csr_TLBRENTRY :
+                   csr_raddr == `CSR_CTAG      ? csr_CTAG      :
+                   csr_raddr == `CSR_DMW0      ? csr_DMW0      :
+                   csr_raddr == `CSR_DMW1      ? csr_DMW1      : 32'b0;
+
+assign csr_rdata_forward = csr_raddr_forward == `CSR_CRMD      ? csr_CRMD      :
+                           csr_raddr_forward == `CSR_PRMD      ? csr_PRMD      :
+                           csr_raddr_forward == `CSR_EUEN      ? csr_EUEN      :
+                           csr_raddr_forward == `CSR_ECFG      ? csr_ECFG      :
+                           csr_raddr_forward == `CSR_ESTAT     ? csr_ESTAT     :
+                           csr_raddr_forward == `CSR_ERA       ? csr_ERA       :
+                           csr_raddr_forward == `CSR_BADV      ? csr_BADV      :
+                           csr_raddr_forward == `CSR_EENTRY    ? csr_EENTRY    :
+                           csr_raddr_forward == `CSR_TLBIDX    ? csr_TLBIDX    :
+                           csr_raddr_forward == `CSR_TLBEHI    ? csr_TLBEHI    :
+                           csr_raddr_forward == `CSR_TLBELO0   ? csr_TLBELO0   :
+                           csr_raddr_forward == `CSR_TLBELO1   ? csr_TLBELO1   :
+                           csr_raddr_forward == `CSR_ASID      ? csr_ASID      :
+                           csr_raddr_forward == `CSR_PGDL      ? csr_PGDL      :
+                           csr_raddr_forward == `CSR_PGDH      ? csr_PGDH      :
+                           csr_raddr_forward == `CSR_PGD       ? csr_PGD       :
+                           csr_raddr_forward == `CSR_CPUID     ? csr_CPUID     :
+                           csr_raddr_forward == `CSR_SAVE0     ? csr_SAVE0     :
+                           csr_raddr_forward == `CSR_SAVE1     ? csr_SAVE1     :
+                           csr_raddr_forward == `CSR_SAVE2     ? csr_SAVE2     :
+                           csr_raddr_forward == `CSR_SAVE3     ? csr_SAVE3     :
+                           csr_raddr_forward == `CSR_TID       ? csr_TID       :
+                           csr_raddr_forward == `CSR_TCFG      ? csr_TCFG      :
+                           csr_raddr_forward == `CSR_TVAL      ? csr_TVAL      :
+                           csr_raddr_forward == `CSR_TICLR     ? 32'h0     :
+                           csr_raddr_forward == `CSR_LLBCTL    ? {csr_LLBCTL[31:1],LLbit} :
+                           csr_raddr_forward == `CSR_TLBRENTRY ? csr_TLBRENTRY :
+                           csr_raddr_forward == `CSR_CTAG      ? csr_CTAG      :
+                           csr_raddr_forward == `CSR_DMW0      ? csr_DMW0      :
+                           csr_raddr_forward == `CSR_DMW1      ? csr_DMW1      : 32'b0;
 
 //CRMD
 always @(posedge clk ) begin
     if (!rstn) begin
-        csr_CRMD     <= 32'h0000_0004;  //DA=1
+        csr_CRMD     <= 32'h0000_0008;  //DA=1
     end
     else if (ex_en) begin
         `CSR_CRMD_PLV <=  2'b0;
@@ -167,7 +202,7 @@ end
 //PRMD
 always @(posedge clk ) begin
     if (!rstn) begin
-        csr_PRMD[31:0] <= 32'b0;
+        csr_PRMD <= 32'b0;
     end
     else if (ex_en) begin
         `CSR_PRMD_PPLV <= `CSR_CRMD_PLV;
@@ -238,6 +273,9 @@ always @(posedge clk ) begin
         csr_ERA <= csr_wdata;
     end
 end
+assign new_pc = (`CSR_ESTAT_ECODE == `ECODE_SYS ||
+                 `CSR_ESTAT_ECODE == `ECODE_BRK ||
+                 `CSR_ESTAT_ECODE == `ECODE_INE)    ? csr_ERA + 32'd4 : csr_ERA;
 
 //BADV
 wire va_error = (ecode == `ECODE_ADEM) || (ecode == `ECODE_ALE) ||
@@ -259,12 +297,13 @@ end
 //EENTRY
 always @(posedge clk ) begin
     if (!rstn) begin
-        csr_EENTRY[5:0] <= 6'b0;
+        csr_EENTRY <= 32'b0;
     end
     else if (EENTRY_we) begin
         csr_EENTRY[31:6] <= csr_wdata[31:6] & csr_wmask[31:6] | ~csr_wmask[31:6] & csr_EENTRY[31:6];
     end
 end
+assign ex_entryPC = csr_EENTRY;
 
 //CPUID
 always @(posedge clk) begin

@@ -5,8 +5,8 @@
 `define Branch_BUS_Wid  32+1
 `define Wrf_BUS_Wid     32+1+5+32
 `define Wcsr_BUS_Wid    1+8+1+1+14+32+32+32+32
-`define ED_for_BUS_Wid  1+5+32
-`define MD_for_BUS_Wid  5+32
+`define ED_for_BUS_Wid  4+5+32+1+14+32+32
+`define MD_for_BUS_Wid  5+32+1+14+32+32
 
 `define alu_op_Wid      19
 

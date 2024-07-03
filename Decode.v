@@ -64,6 +64,8 @@ assign {pc_D,pc_en_D,ex_F,ecode_F,esubcode_D} = FD_BUS_D;
 
 //pipeline handshake
 reg  D_valid;
+reg  ex_flag;
+wire ex_D;
 wire load_stall;
 wire D_ready_go    = D_valid & ~load_stall;
 assign D_allowin   = !D_valid || D_ready_go && E_allowin;
@@ -74,13 +76,14 @@ always @(posedge clk) begin
         FD_BUS_D <= 'b0;
     end
     else if (D_allowin) begin
-        D_valid <= FD_valid;
+        D_valid <= FD_valid && (!ex_flag && !ex_D || ex_en);
     end
 
     if (FD_valid && D_allowin) begin
         FD_BUS_D <= FD_BUS;
     end
 end
+
 
 //inst decode
 decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
@@ -152,7 +155,8 @@ wire inst_rdcntvh_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & 
 //alu_op manage
 wire [`alu_op_Wid-1:0] alu_op;
 
-assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w |
+assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_b | inst_ld_bu | inst_ld_h | inst_ld_hu | inst_ld_w | 
+                    inst_st_b | inst_st_h | inst_st_w | 
                     inst_jirl | inst_bl | inst_pcaddu12i | inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w;
 assign alu_op[ 1] = inst_sub_w;
 assign alu_op[ 2] = inst_slt | inst_slti;
@@ -188,6 +192,7 @@ wire [31:0] imm;
 assign imm = src2_is_4 ? 32'h4                      :
              need_si20 ? {i20[19:0], 12'b0}         :
              need_si12u? {20'b0, i12[11:0]}         :
+             need_si16 ? {{14{i16[15]}}, i16, 2'b0} :
 /*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
  
 
@@ -223,8 +228,8 @@ wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
                            inst_ld_hu ? 4'b0111 : 4'b0000;
 wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
-wire       gr_we         = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & pc_en_D & 
-                           ~inst_ertn;
+wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & pc_en_D & 
+                           ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu  ;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
@@ -253,26 +258,37 @@ regfile u_regfile(
     .wdata  (rf_wdata )
     );
 
-//forward manage
-wire        res_from_mem_E;
+    //forward manage
+wire [ 3:0] res_from_mem_E;
 wire [ 4:0] dest_E;
 wire [ 4:0] dest_M;
-wire [31:0] result_E;
-wire [31:0] result_M;
-assign {res_from_mem_E,dest_E,result_E} = ED_for_BUS;
-assign {dest_M,result_M} = MD_for_BUS;
+wire [31:0] rf_wdata_E;
+wire [31:0] rf_wdata_M;
+wire        csr_we_E;
+wire        csr_we_M;
+wire [13:0] csr_addr_E;
+wire [13:0] csr_addr_M;
+wire [31:0] csr_wmask_E;
+wire [31:0] csr_wmask_M;
+wire [31:0] csr_wdata_E;
+wire [31:0] csr_wdata_M;
 
-assign load_stall = res_from_mem_E && ((rf_raddr1 == dest_E) || (rf_raddr2 == dest_E));
+assign {res_from_mem_E,dest_E,rf_wdata_E,csr_we_E,csr_addr_E,csr_wmask_E,csr_wdata_E} = ED_for_BUS;
+assign {dest_M,rf_wdata_M,csr_we_M,csr_addr_M,csr_wmask_M,csr_wdata_M} = MD_for_BUS;
+
+assign load_stall = |res_from_mem_E && !ex_en &&
+                    ((rf_raddr1 == dest_E) && (|rf_raddr1) || (rf_raddr2 == dest_E) && (|rf_raddr2)) && 
+                    ((rf_raddr1 != dest_M) || (rf_raddr2 != dest_M));
 
 wire [31:0] rj_value;
 wire [31:0] rkd_value;
-assign rj_value  =  rj                ? 
-                    ((rj == dest_E)   ? result_E :
-                     (rj == dest_M)   ? result_M : 
+assign rj_value  =  |rj               ? 
+                    ((rj == dest_E)   ? rf_wdata_E :
+                     (rj == dest_M)   ? rf_wdata_M : 
                      (rj == rf_waddr) && rf_we ? rf_wdata : rf_rdata1) : rf_rdata1;
-assign rkd_value =  rf_raddr2                ? 
-                    ((rf_raddr2 == dest_E)   ? result_E :
-                     (rf_raddr2 == dest_M)   ? result_M : 
+assign rkd_value =  |rf_raddr2               ? 
+                    ((rf_raddr2 == dest_E)   ? rf_wdata_E :
+                     (rf_raddr2 == dest_M)   ? rf_wdata_M : 
                      (rf_raddr2 == rf_waddr) && rf_we ? rf_wdata : rf_rdata2) : rf_rdata2;
 
 //CSR data manage
@@ -287,9 +303,11 @@ wire        csr_we_W;
 wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
+wire [13:0] csr_raddr_forward;
+wire [31:0] csr_rdata_forward;
 wire        ex_en_W;
 wire [ 7:0] ecode_W;
-wire [ 3:0] esubcode_W;
+wire        esubcode_W;
 wire [31:0] pc_W;
 wire [31:0] vaddr_W;
 wire [63:0] counter;
@@ -301,12 +319,15 @@ assign ex_en      = ex_en_W;
 csrReg u_csrReg(
     .clk       (clk       ),
     .rstn      (rstn      ),
-    .csr_addr  (csr_addr  ),
+    .csr_raddr (csr_addr  ),
     .csr_re    (csr_re    ),
     .csr_we    (csr_we_W  ),
+    .csr_waddr (csr_addr_W),
     .csr_wmask (csr_wmask_W),
     .csr_wdata (csr_wdata_W),
     .csr_rdata (csr_rdata ),
+    .csr_raddr_forward (csr_raddr_forward),
+    .csr_rdata_forward (csr_rdata_forward),
     .ex_en     (ex_en_W   ),
     .ecode     (ecode_W   ),
     .esubcode  (esubcode_W),
@@ -321,11 +342,24 @@ csrReg u_csrReg(
     .counterID (counterID )
 );
 
+    //forward manage
+wire        csr_forward_E = csr_we_E && (csr_addr_E == csr_addr);
+wire        csr_forward_M = csr_we_M && (csr_addr_M == csr_addr);
+wire        csr_forward_W = csr_we_W && (csr_addr_W == csr_addr);
+assign      csr_raddr_forward = ({14{csr_forward_E}} & csr_addr_E) | ({14{csr_forward_M}} & csr_addr_M);
+wire [31:0] csr_wmask_forward = ({32{csr_forward_E}} & csr_wmask_E) | ({32{csr_forward_M}} & csr_wmask_M);
+wire [31:0] csr_wdata_forward = ({32{csr_forward_E}} & csr_wdata_E) | ({32{csr_forward_M}} & csr_wdata_M);
+wire [31:0] csr_value;
+assign csr_value =  csr_forward_E | csr_forward_M ? (csr_wdata_forward & csr_wmask_forward | ~csr_wmask_forward & csr_rdata_forward) : 
+                    csr_forward_W                 ? (csr_wdata_W & csr_wmask_W | ~csr_wmask_W & csr_wdata_W)        : csr_rdata;
+
+
 //branch manage
 wire        rj_eq_rd;
 wire        rj_lt_rd;
 wire        rj_ltu_rd;
 wire [31:0] out;
+wire        onverflow;
 wire        sign_bit;
 wire        br_taken;
 wire [31:0] br_target;
@@ -347,13 +381,14 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bge  && !rj_lt_rd
                    || inst_bltu &&  rj_ltu_rd
                    || inst_bgeu && !rj_ltu_rd
-                  ) && rstn;
+                   ) && rstn && !ex_en;
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ; 
 assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
 
-assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (pc_D + br_offs) :
+assign br_target = (inst_beq || inst_bne || inst_bl   || inst_b    ||
+                    inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (pc_D + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
 //alu data input manage
@@ -375,7 +410,7 @@ wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu &
                          ~inst_ld_b && ~inst_ld_h && ~inst_ld_bu && ~inst_ld_hu && ~inst_ld_w && ~inst_st_b && ~inst_st_h && ~inst_st_w && 
                          ~inst_lu12i_w && ~inst_csrrd && ~inst_csrwr && ~inst_csrxchg && ~inst_ertn && ~inst_break && ~inst_syscall &&
                          ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w;
-wire       ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
+assign     ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      has_int      ? int_ecode  :
                      ex_F         ? ecode_F    :
@@ -383,9 +418,22 @@ wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      inst_ertn    ? `ECODE_ERTN:
                      inst_break   ? `ECODE_BRK :
                      unknownInst  ? `ECODE_INE : 8'b0;
+
+always @(posedge clk) begin
+    if (!rstn) begin
+        ex_flag <= 1'b0;
+    end 
+    else if (ex_D) begin
+        ex_flag <= 1'b1;
+    end
+    else if (ex_en) begin
+        ex_flag <= 1'b0;
+    end
+end
+
 //output manage
 assign Branch_BUS = {br_taken,br_target};
 assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem,
-                 ex_D,ecode_D,esubcode_D,csr_addr,csr_we,csr_rdata,csr_wmask,csr_wdata,res_from_csr};
+                 ex_D,ecode_D,esubcode_D,csr_addr,csr_we,csr_value,csr_wmask,csr_wdata,res_from_csr};
 
 endmodule

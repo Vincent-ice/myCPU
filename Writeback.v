@@ -11,6 +11,8 @@ module Writeback (
     output [`Wrf_BUS_Wid-1:0]   Wrf_BUS,
     output [`Wcsr_BUS_Wid-1:0]  Wcsr_BUS,
 
+    input                       ex_en,
+
     output [31:0]               debug_wb_pc,
     output [3:0]                debug_wb_rf_we,
     output [4:0]                debug_wb_rf_wnum,
@@ -43,6 +45,9 @@ always @(posedge clk) begin
     if (!rstn) begin
         W_valid <= 1'b0;
         MW_BUS_W <= 'b0;
+    end
+    else if (ex_en) begin
+        W_valid <= 1'b0;
     end
     else if (W_allowin) begin
         W_valid <= MW_valid;

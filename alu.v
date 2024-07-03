@@ -117,8 +117,11 @@ wire div_ready;
 reg  div_ready_delay;
 wire div_history_find;
 wire div_go = div_ready_delay & (|alu_src2) & (op_div | op_mod | op_divu | op_modu);
-wire div_en = !div_history_find & div_go;
+wire dividend_is_0 = !(|alu_src1) & div_go;
+wire div_en = !div_history_find & div_go & !dividend_is_0;
 wire div_sign = (op_div | op_mod);
+wire [31:0] rem,quo;
+
 divCore_srt2 u_divCore_srt2(
   .clk     (clk          ),
   .rst     (rstn         ),
@@ -130,7 +133,7 @@ divCore_srt2 u_divCore_srt2(
   .quo_o   (quo          ),
   .ready   (div_ready    )
 );
-assign div_stall = ~div_ready || ~div_ready_delay;
+assign div_stall = ~div_ready;
 always @(posedge clk ) begin
     div_ready_delay <= div_ready;
 end
@@ -147,13 +150,12 @@ integer n = 0;
 always @(posedge clk) begin
   if (!rstn) begin
     tag <= 4'b0;
-    while (n < 8) begin
+    for (n = 0;n < 8;n = n + 1) begin
       op1_history[n] <= 32'b0;
       op2_history[n] <= 32'b0;
       rem_history[n] <= 32'b0;
       quo_history[n] <= 32'b0;
       sign_history[n]<= 1'b0;
-      n = n + 1;   
     end
   end
 end
@@ -164,8 +166,8 @@ always @(posedge div_ready_delay) begin
     op1_history[tag] <= alu_src1;
     op2_history[tag] <= alu_src2;
     sign_history[tag]<= div_sign;
-    rem_history[tag] <= rem_result;
-    quo_history[tag] <= quo_result;    
+    rem_history[tag] <= rem;
+    quo_history[tag] <= quo;    
   end
 end
 
@@ -178,22 +180,24 @@ generate
 endgenerate
 assign div_history_find = |find_buff;
 
-assign rem_result = div_history_find ? (find_buff[0] ? rem_history[0] : 
+assign rem_result = dividend_is_0    ? 32'b0                          :
+                    div_history_find ? (find_buff[0] ? rem_history[0] : 
                                         find_buff[1] ? rem_history[1] :
                                         find_buff[2] ? rem_history[2] :
                                         find_buff[3] ? rem_history[3] :
                                         find_buff[4] ? rem_history[4] :
                                         find_buff[5] ? rem_history[5] :
                                         find_buff[6] ? rem_history[6] :
-                                        find_buff[7] ? rem_history[7] : 32'b0) : rem_result;
-assign quo_result = div_history_find ? (find_buff[0] ? quo_history[0] :
+                                        find_buff[7] ? rem_history[7] : 32'b0) : rem;
+assign quo_result = dividend_is_0    ? 32'b0                          :
+                    div_history_find ? (find_buff[0] ? quo_history[0] :
                                         find_buff[1] ? quo_history[1] :
                                         find_buff[2] ? quo_history[2] :
                                         find_buff[3] ? quo_history[3] :
                                         find_buff[4] ? quo_history[4] :
                                         find_buff[5] ? quo_history[5] :
                                         find_buff[6] ? quo_history[6] :
-                                        find_buff[7] ? quo_history[7] : 32'b0) : quo_result;
+                                        find_buff[7] ? quo_history[7] : 32'b0) : quo;
 
 // final result mux
 assign alu_result = ({32{op_add|op_sub}} & add_sub_result)

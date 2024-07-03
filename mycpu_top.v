@@ -33,16 +33,28 @@ wire [`MW_BUS_Wid-1:0]          MW_BUS;
 wire [`ED_for_BUS_Wid-1:0]      ED_for_BUS;
 wire [`MD_for_BUS_Wid-1:0]      MD_for_BUS;
 wire [`Wrf_BUS_Wid-1:0]         Wrf_BUS;
+wire [`Wcsr_BUS_Wid-1:0]        Wcsr_BUS;
 
 wire                            D_allowin;
 wire                            E_allowin;
 wire                            M_allowin;
 wire                            W_allowin;
 
+wire                            ex_en;
+wire [31:0]                     ex_entryPC;
+wire                            ertn_flush;
+wire [31:0]                     new_pc;
+
+wire [ 7:0]                     hardware_interrupt = 8'b0;
+
 Fetch u_Fetch(
     .clk             (clk             ),
     .rstn            (resetn          ),
     .Branch_BUS      (Branch_BUS      ),
+    .ex_en           (ex_en           ),
+    .ex_entryPC      (ex_entryPC      ),
+    .ertn_flush      (ertn_flush      ),
+    .new_pc          (new_pc          ),
     .D_allowin       (D_allowin       ),
     .FD_valid        (FD_valid        ),
     .FD_BUS          (FD_BUS          ),
@@ -53,19 +65,25 @@ Fetch u_Fetch(
 );
 
 Decode u_Decode(
-    .clk             (clk             ),
-    .rstn            (resetn          ),
-    .FD_valid        (FD_valid        ),
-    .FD_BUS          (FD_BUS          ),
-    .inst_sram_rdata (inst_sram_rdata ),
-    .E_allowin       (E_allowin       ),
-    .D_allowin       (D_allowin       ),
-    .ED_for_BUS      (ED_for_BUS      ),
-    .MD_for_BUS      (MD_for_BUS      ),
-    .Wrf_BUS         (Wrf_BUS         ),
-    .DE_valid        (DE_valid        ),
-    .DE_BUS          (DE_BUS          ),
-    .Branch_BUS      (Branch_BUS      )
+    .clk                (clk                ),
+    .rstn               (resetn             ),
+    .FD_valid           (FD_valid           ),
+    .FD_BUS             (FD_BUS             ),
+    .inst_sram_rdata    (inst_sram_rdata    ),
+    .hardware_interrupt (hardware_interrupt ),
+    .E_allowin          (E_allowin          ),
+    .D_allowin          (D_allowin          ),
+    .ED_for_BUS         (ED_for_BUS         ),
+    .MD_for_BUS         (MD_for_BUS         ),
+    .Wrf_BUS            (Wrf_BUS            ),
+    .Wcsr_BUS           (Wcsr_BUS           ),
+    .DE_valid           (DE_valid           ),
+    .DE_BUS             (DE_BUS             ),
+    .Branch_BUS         (Branch_BUS         ),
+    .ex_en              (ex_en              ),
+    .ex_entryPC         (ex_entryPC         ),
+    .ertn_flush         (ertn_flush         ),
+    .new_pc             (new_pc             )
 );
 
 Excute u_Excute(
@@ -78,6 +96,7 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
+    .ex_en           (ex_en           ),
     .data_sram_en    (data_sram_en    ),
     .data_sram_we    (data_sram_we    ),
     .data_sram_addr  (data_sram_addr  ),
@@ -93,6 +112,7 @@ Memory u_Memory(
     .EM_BUS          (EM_BUS          ),
     .MD_for_BUS      (MD_for_BUS      ),
     .data_sram_rdata (data_sram_rdata ),
+    .ex_en           (ex_en           ),
     .MW_valid        (MW_valid        ),
     .MW_BUS          (MW_BUS          )
 );
@@ -104,6 +124,8 @@ Writeback u_Writeback(
     .MW_valid          (MW_valid          ),
     .MW_BUS            (MW_BUS            ),
     .Wrf_BUS           (Wrf_BUS           ),
+    .Wcsr_BUS          (Wcsr_BUS          ),
+    .ex_en             (ex_en             ),
     .debug_wb_pc       (debug_wb_pc       ),
     .debug_wb_rf_we    (debug_wb_rf_we    ),
     .debug_wb_rf_wnum  (debug_wb_rf_wnum  ),
