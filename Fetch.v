@@ -28,9 +28,10 @@ assign {br_taken,br_target} = Branch_BUS;
 //pipeline handshake
 wire ex_F;
 reg  F_valid;
+reg  ex_flag;
 wire F_valid_next   = rstn;//next cycle valid
 wire F_ready_go     = 1'b1;//ready send to next stage
-wire F_allowin      = !F_valid || ex_en || ertn_flush || F_ready_go && D_allowin && !ex_F;//allow input data
+wire F_allowin      = !F_valid || ex_en || F_ready_go && D_allowin && !ex_F;//allow input data
 assign FD_valid     = F_valid_next && F_ready_go;//validity of D stage
 always @(posedge clk) begin
     if (!rstn) begin
@@ -41,6 +42,17 @@ always @(posedge clk) begin
     end
 end
 
+always @(posedge clk) begin
+    if (!rstn) begin
+        ex_flag <= 1'b0;
+    end 
+    else if (ex_F) begin
+        ex_flag <= 1'b1;
+    end
+    else if (ex_en) begin
+        ex_flag <= 1'b0;
+    end
+end
 
 //PC
 reg  [31:0] pc_reg;

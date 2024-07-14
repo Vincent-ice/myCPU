@@ -59,6 +59,9 @@ always @(posedge clk) begin
         E_valid <= 1'b0;
         DE_BUS_E <= 'b0;
     end
+    else if (ex_en) begin
+        DE_BUS_E <= 'b0;
+    end
     else if (E_allowin) begin
         E_valid <= DE_valid && (!ex_flag && !ex_E || ex_en);
     end
@@ -70,11 +73,12 @@ end
 
 //ALU
 wire [31:0] alu_result_E;
+wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_flag}};
 
 alu u_alu(
     .clk          (clk         ),
     .rstn         (rstn        ),
-    .alu_op       (alu_op_E    ),
+    .alu_op       (alu_op    ),
     .alu_src1     (alu_src1_E  ),
     .alu_src2     (alu_src2_E  ),
     .alu_result   (alu_result_E),
@@ -84,25 +88,24 @@ alu u_alu(
 //data sram manage
 wire [31:0] vaddr_E = alu_result_E;
 assign data_sram_en    = E_valid && (|mem_we_E || |res_from_mem_E);
-assign data_sram_we    = E_valid ? mem_we_E[3] ? 4'b1111                          :
-                                   mem_we_E[1] ? (vaddr_E[1] ? 4'b1100 : 4'b0011) :
-                                   mem_we_E[0] ? (vaddr_E[1] ? vaddr_E[0] ? 4'b1000 : 4'b0100 : vaddr_E[0] ? 4'b0010 : 4'b0001)
-                                               : 4'b0000
-                                 : 4'b0000;
+assign data_sram_we    = E_valid && !ex_E ? mem_we_E[3] ? 4'b1111                          :
+                                            mem_we_E[1] ? (vaddr_E[1] ? 4'b1100 : 4'b0011) :
+                                            mem_we_E[0] ? (vaddr_E[1] ? vaddr_E[0] ? 4'b1000 : 4'b0100 : vaddr_E[0] ? 4'b0010 : 4'b0001)
+                                                        : 4'b0000
+                                          : 4'b0000;
 assign data_sram_addr  = vaddr_E;
 assign data_sram_wdata = mem_we_E[3] ? rkd_value_E            : 
                          mem_we_E[1] ? {2{rkd_value_E[15:0]}} :
                          mem_we_E[0] ? {4{rkd_value_E[7:0]}}  : 32'b0;
 
 //exception manage
-wire        ADEM       = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
+wire        ALE        = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
                          ((mem_we_E[1] | res_from_mem_E[1])&( data_sram_addr[0]  ));
-assign      ex_E       = E_valid && (ex_D | ADEM);
+assign      ex_E       = E_valid && (ex_D | ALE);
 wire [7:0]  ecode_E    = ~E_valid ? 8'h00       :
                          ex_D     ? ecode_D     :
-                         ADEM     ? `ECODE_ADEM : 8'b0;
-wire        esubcode_E = ex_D     ? esubcode_D  :
-                         ADEM     ? `ESUBCODE_ADEM : 1'b0;
+                         ALE      ? `ECODE_ALE  : 8'b0;
+wire        esubcode_E = ex_D     ? esubcode_D  : 1'b0;
 
 always @(posedge clk) begin
     if (!rstn) begin

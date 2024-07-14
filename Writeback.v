@@ -48,6 +48,7 @@ always @(posedge clk) begin
     end
     else if (ex_en) begin
         W_valid <= 1'b0;
+        MW_BUS_W <= 'b0;
     end
     else if (W_allowin) begin
         W_valid <= MW_valid;
@@ -59,14 +60,14 @@ always @(posedge clk) begin
 end
 
 //Wrf BUS
-assign Wrf_BUS = {gr_we_W && W_valid,dest_W,final_result_W};
+assign Wrf_BUS = {gr_we_W && W_valid && !ex_W,dest_W,final_result_W};
 
 //Wcsr BUS
 assign Wcsr_BUS = {ex_W && W_valid,ecode_W,esubcode_W,csr_we_W && W_valid,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W};
     
 // debug info generate
 assign debug_wb_pc       = pc_W;
-assign debug_wb_rf_we    = {4{gr_we_W && W_valid}};
+assign debug_wb_rf_we    = {4{gr_we_W && W_valid && !ex_W}};
 assign debug_wb_rf_wnum  = dest_W;
 assign debug_wb_rf_wdata = final_result_W;
 
