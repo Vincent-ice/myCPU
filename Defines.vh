@@ -11,6 +11,15 @@
 `define alu_op_Wid      19
 
 `define TLBNUM          16
+`define CSR2TLB_BUS_Wid    1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1+$clog2(`TLBNUM)
+`define CSR2TLB_BUS_DE_Wid 5+5+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1+$clog2(`TLBNUM)+5+5
+`define CSR2TLB_BUS_EM_Wid `CSR2TLB_BUS_DE_Wid
+`define CSR2TLB_BUS_MW_Wid 1+5+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_Wid    4+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_EM_Wid 1+$clog2(`TLBNUM)
+`define TLB2CSR_BUS_MW_Wid `TLB2CSR_BUS_EM_Wid+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+
+`define CSR2F_BUS_Wid 10+1+1+2+1+1+3+1+1+3
 
 `define ECODE_PIL       8'h01
 `define ECODE_PIS       8'h02
@@ -41,3 +50,4 @@
 `define ECODE_WPEM      8'h13
 `define ESUBCODE_WPEM   1'b1
 `define ECODE_ERTN      8'h14
+`define ECODE_TLBR      8'h3f

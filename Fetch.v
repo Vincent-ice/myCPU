@@ -16,8 +16,20 @@ module Fetch (
 
     output                          inst_sram_en,
     output   [3:0]                  inst_sram_we,
-    output   [31:0]                 inst_sram_addr,inst_sram_wdata
+    output   [31:0]                 inst_sram_addr,inst_sram_wdata,
 
+    input  [`CSR2F_BUS_Wid-1:0] CSR2F_BUS,
+    output [              18:0] s0_vppn,
+    output                      s0_va_bit12,
+    output [               9:0] s0_asid,
+    input                       s0_found,
+    input  [$clog2(`TLBNUM)-1:0]s0_index,
+    input  [              19:0] s0_ppn,
+    input  [               5:0] s0_ps,
+    input  [               1:0] s0_plv,
+    input  [               1:0] s0_mat,
+    input                       s0_d,
+    input                       s0_v
 );
 
 //Branch bus
@@ -61,19 +73,75 @@ always @(posedge clk) begin
     end
 end
 
-//exception manage
-assign      ex_F       = |pc_next[1:0] && F_valid_next;
-wire [ 7:0] ecode_F    = ex_F ? `ECODE_ADEF : 8'h00;
-wire        esubcode_F = `ESUBCODE_ADEF;
+//address translation
+wire [ 9:0] csr_ASID_ASID;
+wire        csr_CRMD_DA;
+wire        csr_CRMD_PG;
+wire [ 1:0] csr_CRMD_PLV;
+wire        csr_DMW0_PLV0;
+wire        csr_DMW0_PLV3;
+wire [ 2:0] csr_DMW0_VSEG;
+wire        csr_DMW1_PLV0;
+wire        csr_DMW1_PLV3;
+wire [ 2:0] csr_DMW1_VSEG;
+assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
+        csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,
+        csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG} = CSR2F_BUS;
 
-//FD BUS
-assign FD_BUS = {inst_sram_addr,pc_en,ex_F,ecode_F,esubcode_F};
+wire        da_hit;
+wire        dmw0_hit;
+wire        dmw1_hit;
+wire        dmw_hit = dmw0_hit || dmw1_hit;
+//TLB
+wire [31:0] vaddr = pc_next;
+wire [31:0] paddr;
+
+wire [19:0] vpn = vaddr[31:12];
+wire [21:0] offset = vaddr[21:0];
+
+assign s0_vppn = vpn[19:1];
+assign s0_va_bit12 = vpn[0];
+assign s0_asid = csr_ASID_ASID;
+
+assign tlb_addr = (s0_ps == 6'd12) ? {s0_ppn[19:0], offset[11:0]} :
+                                     {s0_ppn[19:10], offset[21:0]};
+
+
+assign da_hit = (csr_CRMD_DA == 1) && (csr_CRMD_PG == 0);
+
+// DMW
+assign dmw0_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW0_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW0_PLV3 ) && (vaddr[31:29] == csr_DMW0_VSEG); 
+assign dmw1_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW1_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW1_PLV3 ) && (vaddr[31:29] == csr_DMW1_VSEG); 
+
+assign dmw_addr = {32{dmw0_hit}} & {csr_DMW0_VSEG, vaddr[28:0]} |
+                  {32{dmw1_hit}} & {csr_DMW1_VSEG, vaddr[28:0]};
+
+// PADDR
+assign paddr = da_hit  ? vaddr    :
+               dmw_hit ? dmw_addr :
+                         tlb_addr;
+
+//exception manage
+wire        ex_ADEF    = |pc_next[1:0] && F_valid_next;
+wire        ex_TLBR    = ~da_hit & ~dmw_hit & ~s0_found;
+wire        ex_PIF     = ~da_hit & ~dmw_hit & s0_found & ~s0_v;
+wire        ex_PPI     = ~da_hit & ~dmw_hit & (csr_CRMD_PLV > s0_plv);
+
+assign      ex_F       = ex_ADEF || ex_TLBR || ex_PIF || ex_PPI;
+wire [ 7:0] ecode_F    = ex_ADEF ? `ECODE_ADEF :
+                         ex_TLBR ? `ECODE_TLBR :
+                         ex_PIF  ? `ECODE_PIF  :
+                         ex_PPI  ? `ECODE_PPI  : 8'h00;
+wire        esubcode_F = `ESUBCODE_ADEF;
 
 //inst sram manage
 assign inst_sram_en    = pc_en ; 
-assign inst_sram_addr  = pc_next; //virtual
+assign inst_sram_addr  = paddr ;
 assign inst_sram_we    = 4'b0  ;
 assign inst_sram_wdata = 32'b0 ;
 
-    
+//FD BUS
+assign FD_BUS = {inst_sram_addr,pc_en,ex_F,ecode_F,esubcode_F};
 endmodule

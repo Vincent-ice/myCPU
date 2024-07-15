@@ -24,7 +24,10 @@ module Decode (
     output                          ex_en,
     output [31:0]                   ex_entryPC,
     output                          ertn_flush,
-    output [31:0]                   new_pc
+    output [31:0]                   new_pc,
+
+    input  [`TLB2CSR_BUS_MW_Wid-1:0]TLB2CSR_BUS_W,
+    output [`CSR2TLB_BUS_DE_Wid-1:0]CSR2TLB_BUS_D
 );
 
 
@@ -45,6 +48,8 @@ wire [11:0] i12 = inst_D[21:10];
 wire [19:0] i20 = inst_D[24: 5];
 wire [15:0] i16 = inst_D[25:10];
 wire [25:0] i26 = {inst_D[ 9: 0], inst_D[25:10]};
+
+wire [4:0]  invop = inst_D[4:0];
 
 wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
@@ -150,6 +155,12 @@ wire inst_rdcntid   = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & 
 wire inst_rdcntvl_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h18] & (rj==5'b00);
 wire inst_rdcntvh_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h19] & (rj==5'b00);
 
+wire inst_tlbsrch = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] && op_19_15_d[5'h10] && op_14_10_d[5'h0a] && (rj==5'b00) && (rd==5'b00);
+wire inst_tlbrd   = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] && op_19_15_d[5'h10] && op_14_10_d[5'h0b] && (rj==5'b00) && (rd==5'b00);
+wire inst_tlbwr   = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] && op_19_15_d[5'h10] && op_14_10_d[5'h0c] && (rj==5'b00) && (rd==5'b00);
+wire inst_tlbfill = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] && op_19_15_d[5'h10] && op_14_10_d[5'h0d] && (rj==5'b00) && (rd==5'b00);
+wire inst_invtlb  = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h13] & (invop==5'h00 | invop==5'h01 | invop==5'h02 | invop==5'h03 | invop==5'h04 | invop==5'h05 | invop==5'h06);
+
 /* don't forget add the inst to the wire 'unknownInst' at last */
 
 //alu_op manage
@@ -229,7 +240,8 @@ wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
 wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
 wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & pc_en_D & 
-                           ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu  ;
+                           ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu& ~inst_break & ~inst_syscall & 
+                           ~inst_tlbsrch & ~inst_tlbrd & ~inst_tlbwr & ~inst_tlbfill;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
@@ -333,13 +345,16 @@ csrReg u_csrReg(
     .esubcode  (esubcode_W),
     .pc        (pc_W      ),
     .vaddr     (vaddr_W   ),
+    .ertn_flush(ertn_flush),
     .hardware_interrupt(hardware_interrupt),
     .has_int   (has_int   ),
     .int_ecode (int_ecode ),
     .new_pc    (new_pc    ),
     .ex_entryPC(ex_entryPC),
     .counter   (counter   ),
-    .counterID (counterID )
+    .counterID (counterID ),
+    .CSR2TLB_BUS(CSR2TLB_BUS),
+    .TLB2CSR_BUS({inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,TLB2CSR_BUS_W})
 );
 
     //forward manage
@@ -409,7 +424,7 @@ wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu &
                          ~inst_b && ~inst_bl && ~inst_beq && ~inst_bne && ~inst_blt && ~inst_bge && ~inst_bltu && ~inst_bgeu && 
                          ~inst_ld_b && ~inst_ld_h && ~inst_ld_bu && ~inst_ld_hu && ~inst_ld_w && ~inst_st_b && ~inst_st_h && ~inst_st_w && 
                          ~inst_lu12i_w && ~inst_csrrd && ~inst_csrwr && ~inst_csrxchg && ~inst_ertn && ~inst_break && ~inst_syscall &&
-                         ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w;
+                         ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w && ~inst_tlbfill && ~inst_tlbwr && ~inst_tlbrd && ~inst_tlbsrch && ~inst_invtlb;
 assign     ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      has_int      ? int_ecode  :
@@ -435,5 +450,6 @@ end
 assign Branch_BUS = {br_taken,br_target};
 assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem,
                  ex_D,ecode_D,esubcode_D,csr_addr,csr_we,csr_value,csr_wmask,csr_wdata,res_from_csr};
+assign CSR2TLB_BUS_D = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_invtlb,invop,CSR2TLB_BUS};
 
 endmodule
