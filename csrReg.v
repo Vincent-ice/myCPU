@@ -27,14 +27,14 @@ module csrReg (
     output [ 7:0]               int_ecode,
 
     output [31:0]               new_pc,
-    input                       ertn_flush,
     output [31:0]               ex_entryPC,
 
     output [63:0]               counter,
     output [31:0]               counterID,
 
     input  [`TLB2CSR_BUS_Wid-1:0] TLB2CSR_BUS,
-    output [`CSR2TLB_BUS_Wid-1:0] CSR2TLB_BUS
+    output [`CSR2TLB_BUS_Wid-1:0] CSR2TLB_BUS,
+    output [`CSR2FE_BUS_Wid-1:0]  CSR2FE_BUS
 );
 
 //csr register
@@ -717,5 +717,9 @@ assign r_index = `CSR_TLBIDX_INDEX;
 assign CSR2TLB_BUS = {wen,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
                       w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1,r_index};
 
+//for address translation
+assign CSR2FE_BUS = {`CSR_ASID_ASID,`CSR_CRMD_DA,`CSR_CRMD_PG,`CSR_CRMD_PLV,
+                     `CSR_DMW0_PLV0,`CSR_DMW0_PLV3,`CSR_DMW0_VSEG,`CSR_DMW0_PSEG,
+                     `CSR_DMW1_PLV0,`CSR_DMW1_PLV3,`CSR_DMW1_VSEG,`CSR_DMW1_PSEG};
 
 endmodule

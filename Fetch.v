@@ -18,18 +18,18 @@ module Fetch (
     output   [3:0]                  inst_sram_we,
     output   [31:0]                 inst_sram_addr,inst_sram_wdata,
 
-    input  [`CSR2F_BUS_Wid-1:0] CSR2F_BUS,
-    output [              18:0] s0_vppn,
-    output                      s0_va_bit12,
-    output [               9:0] s0_asid,
-    input                       s0_found,
-    input  [$clog2(`TLBNUM)-1:0]s0_index,
-    input  [              19:0] s0_ppn,
-    input  [               5:0] s0_ps,
-    input  [               1:0] s0_plv,
-    input  [               1:0] s0_mat,
-    input                       s0_d,
-    input                       s0_v
+    input  [`CSR2FE_BUS_Wid-1:0] CSR2FE_BUS,
+    output [               18:0] s0_vppn,
+    output                       s0_va_bit12,
+    output [                9:0] s0_asid,
+    input                        s0_found,
+    input  [$clog2(`TLBNUM)-1:0] s0_index,
+    input  [               19:0] s0_ppn,
+    input  [                5:0] s0_ps,
+    input  [                1:0] s0_plv,
+    input  [                1:0] s0_mat,
+    input                        s0_d,
+    input                        s0_v
 );
 
 //Branch bus
@@ -97,8 +97,8 @@ wire        csr_DMW1_PLV0;
 wire        csr_DMW1_PLV3;
 wire [ 2:0] csr_DMW1_VSEG;
 assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
-        csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,
-        csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG} = CSR2F_BUS;
+        csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,csr_DMW0_PSEG,
+        csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG,csr_DMW1_PSEG} = CSR2FE_BUS;
 
 wire        da_hit;
 wire        dmw0_hit;
@@ -115,8 +115,8 @@ assign s0_vppn = vpn[19:1];
 assign s0_va_bit12 = vpn[0];
 assign s0_asid = csr_ASID_ASID;
 
-assign tlb_addr = (s0_ps == 6'd12) ? {s0_ppn[19:0], offset[11:0]} :
-                                     {s0_ppn[19:10], offset[21:0]};
+wire [31:0] tlb_addr = (s0_ps == 6'd12) ? {s0_ppn[19:0], offset[11:0]} :
+                                          {s0_ppn[19:10], offset[21:0]};
 
 
 assign da_hit = (csr_CRMD_DA == 1) && (csr_CRMD_PG == 0);
@@ -127,13 +127,13 @@ assign dmw0_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW0_PLV0   ||
 assign dmw1_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW1_PLV0   ||
                    csr_CRMD_PLV == 2'b11 && csr_DMW1_PLV3 ) && (vaddr[31:29] == csr_DMW1_VSEG); 
 
-assign dmw_addr = {32{dmw0_hit}} & {csr_DMW0_VSEG, vaddr[28:0]} |
-                  {32{dmw1_hit}} & {csr_DMW1_VSEG, vaddr[28:0]};
+wire [31:0] dmw_addr = {32{dmw0_hit}} & {csr_DMW0_PSEG, vaddr[28:0]} |
+                       {32{dmw1_hit}} & {csr_DMW1_PSEG, vaddr[28:0]};
 
 // PADDR
 assign paddr = da_hit  ? vaddr    :
                dmw_hit ? dmw_addr :
-                         tlb_addr;
+                         tlb_addr ;
 
 //exception manage
 wire        ex_ADEF    = |pc_next[1:0] && F_valid_next;

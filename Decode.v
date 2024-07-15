@@ -26,8 +26,9 @@ module Decode (
     output                          ertn_flush,
     output [31:0]                   new_pc,
 
-    input  [`TLB2CSR_BUS_MW_Wid-1:0]TLB2CSR_BUS_W,
-    output [`CSR2TLB_BUS_DE_Wid-1:0]CSR2TLB_BUS_D
+    input  [`TLB2CSR_BUS_WD_Wid-1:0]TLB2CSR_BUS_W,
+    output [`CSR2TLB_BUS_DE_Wid-1:0]CSR2TLB_BUS_D,
+    output [`CSR2FE_BUS_Wid-1:0]    CSR2FE_BUS
 );
 
 
@@ -361,7 +362,8 @@ csrReg u_csrReg(
     .counter   (counter   ),
     .counterID (counterID ),
     .CSR2TLB_BUS(CSR2TLB_BUS),
-    .TLB2CSR_BUS({inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,TLB2CSR_BUS_W})
+    .TLB2CSR_BUS({inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,TLB2CSR_BUS_W}),
+    .CSR2FE_BUS(CSR2FE_BUS)
 );
 
     //forward manage

@@ -9,11 +9,11 @@ module Writeback (
     input  [`MW_BUS_Wid-1:0]    MW_BUS,
 
     output [`Wrf_BUS_Wid-1:0]   Wrf_BUS,
-    output [`Wcsr_BUS_Wid-1:0]  Wcso_BUS,
+    output [`Wcsr_BUS_Wid-1:0]  Wcsr_BUS,
 
     input  [`CSR2TLB_BUS_MW_Wid-1:0] CSR2TLB_BUS_M,
     input  [`TLB2CSR_BUS_MW_Wid-1:0] TLB2CSR_BUS_M,
-    output [`TLB2CSR_BUS_MW_Wid-1:0] TLB2CSR_BUS,
+    output [`TLB2CSR_BUS_WD_Wid-1:0] TLB2CSR_BUS,
 
     input                       ex_en,
 

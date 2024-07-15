@@ -18,8 +18,9 @@
 `define TLB2CSR_BUS_Wid    4+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
 `define TLB2CSR_BUS_EM_Wid 1+$clog2(`TLBNUM)
 `define TLB2CSR_BUS_MW_Wid `TLB2CSR_BUS_EM_Wid+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_WD_Wid `TLB2CSR_BUS_MW_Wid
 
-`define CSR2F_BUS_Wid 10+1+1+2+1+1+3+1+1+3
+`define CSR2FE_BUS_Wid  10+1+1+2+1+1+3+3+1+1+3+3
 
 `define ECODE_PIL       8'h01
 `define ECODE_PIS       8'h02
