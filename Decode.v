@@ -304,7 +304,8 @@ assign rkd_value =  |rf_raddr2               ?
                      (rf_raddr2 == rf_waddr) && rf_we ? rf_wdata : rf_rdata2) : rf_rdata2;
 
 //CSR data manage
-wire [13:0] csr_addr     = inst_D[23:10];
+wire [13:0] csr_addr     = inst_ertn ? 14'h06 :
+                           inst_rdcntid ? 14'h40 : inst_D[23:10];
 wire        csr_we       = inst_csrwr | inst_csrxchg;
 wire        csr_re       = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire [31:0] csr_wmask    = {32{inst_csrxchg}} & rj_value | {32{~inst_csrxchg}};
@@ -321,12 +322,17 @@ wire        ex_en_W;
 wire [ 7:0] ecode_W;
 wire        esubcode_W;
 wire [31:0] pc_W;
+wire [31:0] ex_pc;
+wire [31:0] era_pc;
 wire [31:0] vaddr_W;
+wire        has_int;
+wire [ 7:0] int_ecode;
 wire [63:0] counter;
 wire [31:0] counterID;
 assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
 assign ertn_flush = inst_ertn && D_valid;
 assign ex_en      = ex_en_W;
+assign ex_pc      = ex_F ? pc_D - 32'd4 : pc_W;
 
 csrReg u_csrReg(
     .clk       (clk       ),
@@ -349,7 +355,8 @@ csrReg u_csrReg(
     .hardware_interrupt(hardware_interrupt),
     .has_int   (has_int   ),
     .int_ecode (int_ecode ),
-    .new_pc    (new_pc    ),
+    .new_pc    (era_pc    ),
+    .ertn_flush(ertn_flush),
     .ex_entryPC(ex_entryPC),
     .counter   (counter   ),
     .counterID (counterID ),
@@ -366,8 +373,8 @@ wire [31:0] csr_wmask_forward = ({32{csr_forward_E}} & csr_wmask_E) | ({32{csr_f
 wire [31:0] csr_wdata_forward = ({32{csr_forward_E}} & csr_wdata_E) | ({32{csr_forward_M}} & csr_wdata_M);
 wire [31:0] csr_value;
 assign csr_value =  csr_forward_E | csr_forward_M ? (csr_wdata_forward & csr_wmask_forward | ~csr_wmask_forward & csr_rdata_forward) : 
-                    csr_forward_W                 ? (csr_wdata_W & csr_wmask_W | ~csr_wmask_W & csr_wdata_W)        : csr_rdata;
-
+                    csr_forward_W                 ? (csr_wdata_W & csr_wmask_W | ~csr_wmask_W & csr_wdata_forward)        : csr_rdata;
+assign new_pc = csr_value;
 
 //branch manage
 wire        rj_eq_rd;
@@ -410,7 +417,7 @@ assign br_target = (inst_beq || inst_bne || inst_bl   || inst_b    ||
 wire  [31:0] alu_src1;
 wire  [31:0] alu_src2;
 assign alu_src1 = src1_is_pc     ? pc_D[31:0]     :
-                  inst_rdcntid   ? counterID      :
+                  inst_rdcntid   ? csr_value      :
                   inst_rdcntvl_w ? counter[31:0]  : 
                   inst_rdcntvh_w ? counter[63:32] : rj_value;
 assign alu_src2 = src2_is_imm                                    ? imm   :
@@ -427,10 +434,9 @@ wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu &
                          ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w && ~inst_tlbfill && ~inst_tlbwr && ~inst_tlbrd && ~inst_tlbsrch && ~inst_invtlb;
 assign     ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
-                     has_int      ? int_ecode  :
                      ex_F         ? ecode_F    :
+                     has_int      ? int_ecode  :
                      inst_syscall ? `ECODE_SYS :
-                     inst_ertn    ? `ECODE_ERTN:
                      inst_break   ? `ECODE_BRK :
                      unknownInst  ? `ECODE_INE : 8'b0;
 

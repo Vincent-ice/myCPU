@@ -27,6 +27,7 @@ module csrReg (
     output [ 7:0]               int_ecode,
 
     output [31:0]               new_pc,
+    input                       ertn_flush,
     output [31:0]               ex_entryPC,
 
     output [63:0]               counter,
@@ -108,7 +109,7 @@ reg  LLbit;
 //inturrupt
 wire [12:0] int = csr_ECFG[12:0] & csr_ESTAT[12:0] & {13{`CSR_CRMD_IE}};
 assign has_int = |int;
-assign int_ecode = int[12] ? 8'd76 :
+assign int_ecode = /* int[12] ? 8'd76 :
                    int[11] ? 8'd75 :
                    int[10] ? 8'd74 :
                    int[ 9] ? 8'd73 :
@@ -120,7 +121,8 @@ assign int_ecode = int[12] ? 8'd76 :
                    int[ 3] ? 8'd67 :
                    int[ 2] ? 8'd66 :
                    int[ 1] ? 8'd65 :
-                   int[ 0] ? 8'd64 : 8'd0;
+                   int[ 0] ? 8'd64 : */
+                   8'd0;
 
 //CSR rdata
 wire [31:0] csr_PGD_rvalue;
@@ -195,7 +197,7 @@ always @(posedge clk ) begin
         `CSR_CRMD_PLV <=  2'b0;
         `CSR_CRMD_IE  <=  1'b0;
     end
-    else if (ecode == `ECODE_ERTN) begin
+    else if (ertn_flush) begin
         `CSR_CRMD_PLV <= `CSR_PRMD_PPLV;
         `CSR_CRMD_IE  <= `CSR_PRMD_PIE ;
     end 
@@ -234,7 +236,8 @@ always @(posedge clk ) begin
         csr_ECFG <= 32'b0;
     end
     else if (ECFG_we) begin
-        csr_ECFG[12:0] <= csr_wdata[12:0] & csr_wmask[12:0] | ~csr_wmask[12:0] & csr_ECFG[12:0];
+        csr_ECFG[9:0] <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & csr_ECFG[9:0];
+        csr_ECFG[12:11] <= csr_wdata[12:11] & csr_wmask[12:11] | ~csr_wmask[12:11] & csr_ECFG[12:11];
     end
 end
 
@@ -258,8 +261,8 @@ always @(posedge clk ) begin
         end
 
         if (ex_en) begin
-            `CSR_ESTAT_ECODE    <= ecode   ;
-            `CSR_ESTAT_ESUBCODE <= esubcode;
+            `CSR_ESTAT_ECODE    <= ecode[5:0];
+            `CSR_ESTAT_ESUBCODE <= {8'b0,esubcode};
         end
         else if (ESTAT_we) begin
             csr_ESTAT[1:0] <= csr_wdata[1:0] & csr_wmask[1:0] | ~csr_wmask[1:0] & csr_ESTAT[1:0];
@@ -278,9 +281,25 @@ always @(posedge clk ) begin
         csr_ERA <= csr_wdata;
     end
 end
-assign new_pc = (`CSR_ESTAT_ECODE == `ECODE_SYS ||
+    //deal with no ex ertn
+reg in_ex;
+always @(posedge clk) begin
+    if(!rstn) begin
+        in_ex <= 1'b0;
+    end
+    else if (ex_en) begin
+        in_ex <= 1'b1;
+    end
+    else if (ertn_flush) begin
+        in_ex <= 1'b0;
+    end
+end
+
+assign new_pc = in_ex &&
+                (`CSR_ESTAT_ECODE == `ECODE_SYS ||
                  `CSR_ESTAT_ECODE == `ECODE_BRK ||
-                 `CSR_ESTAT_ECODE == `ECODE_INE)    ? csr_ERA + 32'd4 : csr_ERA;
+                 `CSR_ESTAT_ECODE == `ECODE_INE ||
+                 `CSR_ESTAT_ECODE == `ECODE_INT)  ? csr_ERA + 32'd4 : csr_ERA;
 
 //BADV
 wire va_error = (ecode == `ECODE_ADEM) || (ecode == `ECODE_ALE) ||

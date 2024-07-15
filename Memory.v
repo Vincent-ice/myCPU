@@ -76,6 +76,9 @@ always @(posedge clk) begin
         CSR2TLB_BUS_M <= 'b0;
         TLB2CSR_BUS_M <= 'b0;
     end
+    else if (ex_en) begin
+        EM_BUS_M <= 'b0;
+    end
     else if (M_allowin) begin
         M_valid <= EM_valid && (!ex_M || ex_en);
     end

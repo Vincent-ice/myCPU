@@ -1,10 +1,10 @@
 `define FD_BUS_Wid      32+1+1+8+1
-`define DE_BUS_Wid      32+`alu_op_Wid+32+32+32+1+4+5+4+1+8+1+14+1+32+32+32+1
-`define EM_BUS_Wid      32+32+1+5+4+32+1+8+1+14+1+32+32
-`define MW_BUS_Wid      32+32+1+5+32+1+8+1+14+1+32+32
+`define DE_BUS_Wid      32+`alu_op_Wid+32+32+32+1+4+5+4+1+8+1+14+1+32+32+32+1+1
+`define EM_BUS_Wid      32+32+1+5+4+32+1+8+1+14+1+32+32+1
+`define MW_BUS_Wid      32+32+1+5+32+1+8+1+14+1+32+32+1
 `define Branch_BUS_Wid  32+1
 `define Wrf_BUS_Wid     32+1+5+32
-`define Wcsr_BUS_Wid    1+8+1+1+14+32+32+32+32
+`define Wcsr_BUS_Wid    1+8+1+1+14+32+32+32+32+1
 `define ED_for_BUS_Wid  4+5+32+1+14+32+32
 `define MD_for_BUS_Wid  5+32+1+14+32+32
 
@@ -50,4 +50,5 @@
 `define ECODE_WPEM      8'h13
 `define ESUBCODE_WPEM   1'b1
 `define ECODE_ERTN      8'h14
+`define ECODE_INT       8'h0
 `define ECODE_TLBR      8'h3f
