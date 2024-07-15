@@ -28,7 +28,6 @@ assign {br_taken,br_target} = Branch_BUS;
 //pipeline handshake
 wire ex_F;
 reg  F_valid;
-reg  ex_flag;
 wire F_valid_next   = rstn;//next cycle valid
 wire F_ready_go     = 1'b1;//ready send to next stage
 wire F_allowin      = !F_valid || ex_en || F_ready_go && D_allowin && !ex_F;//allow input data
@@ -39,18 +38,6 @@ always @(posedge clk) begin
     end
     else if (F_allowin) begin
         F_valid <= F_valid_next;
-    end
-end
-
-always @(posedge clk) begin
-    if (!rstn) begin
-        ex_flag <= 1'b0;
-    end 
-    else if (ex_F) begin
-        ex_flag <= 1'b1;
-    end
-    else if (ex_en) begin
-        ex_flag <= 1'b0;
     end
 end
 
@@ -79,7 +66,11 @@ wire [ 7:0] ecode_F    = ex_F ? `ECODE_ADEF : 8'h00;
 wire        esubcode_F = `ESUBCODE_ADEF;
 
 //FD BUS
-assign FD_BUS = {inst_sram_addr,pc_en,ex_F,ecode_F,esubcode_F};
+assign FD_BUS = {inst_sram_addr,//42:11
+                 pc_en,         //10
+                 ex_F,          //9
+                 ecode_F,       //8:1
+                 esubcode_F};   //0
 
 //inst sram manage
 assign inst_sram_en    = pc_en ; 

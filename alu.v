@@ -111,6 +111,9 @@ multCore u_multCore(
   .sign_en (op_mul | op_mulh  ),
   .out     (mul_result        )
 );
+/* wire signed [63:0] mul_sign = $signed(alu_src1) * $signed(alu_src2);
+wire        [63:0] mul_unsign = alu_src1 * alu_src2;
+assign mul_result = (op_mul | op_mulh) ? mul_sign : mul_unsign; */
 
 // DIV, DIVU, MOD, MODU result
 wire div_ready;
@@ -121,6 +124,7 @@ wire dividend_is_0 = !(|alu_src1) & div_go;
 wire div_en = !div_history_find & div_go & !dividend_is_0;
 wire div_sign = (op_div | op_mod);
 wire [31:0] rem,quo;
+wire div_complete;
 
 divCore_srt2 u_divCore_srt2(
   .clk     (clk          ),
@@ -131,7 +135,8 @@ divCore_srt2 u_divCore_srt2(
   .op2     (alu_src2     ),
   .rem_o   (rem          ),
   .quo_o   (quo          ),
-  .ready   (div_ready    )
+  .ready   (div_ready    ),
+  .complete(div_complete )
 );
 assign div_stall = ~div_ready;
 always @(posedge clk ) begin
@@ -158,10 +163,7 @@ always @(posedge clk) begin
       sign_history[n]<= 1'b0;
     end
   end
-end
-
-always @(posedge div_ready_delay) begin
-  if (rstn) begin
+  else if (div_complete) begin
     tag              <= tag + 1;
     op1_history[tag] <= alu_src1;
     op2_history[tag] <= alu_src2;

@@ -7,7 +7,8 @@ module divCore_srt2(
 	input 		[31:0] op2,	   // divisor
 	output reg  [31:0] rem_o,
 	output reg  [31:0] quo_o,
-    output reg         ready
+    output reg         ready,
+	output             complete
 );
 
 //------------------------ SIGNALS ------------------------//
@@ -70,6 +71,7 @@ always @(posedge clk or negedge rst) begin
 	end
 end
 
+assign complete = state_reg==ST_OUT ? 1'b1 : 1'b0;
 
 always @(*) begin
 	if(!rst) begin
@@ -174,38 +176,43 @@ always @(posedge clk or negedge rst) begin
 end
 
 // on the fly conversion
-always @(*) begin
-	if(!rst) begin
-		Q_next  <= 'b0;
-		QM_next <= 'b0;
-	end
-	if(state_reg==ST_DIV) begin
-		if(!n) begin	
-			Q_next  <= {Q_reg[32:0],q};
-		end else begin
-			Q_next  <= {QM_reg[32:0],q};
-		end
-		if(!n & q) begin	
-			QM_next <= {Q_reg[32:0],~q};
-		end else begin
-			QM_next <= {QM_reg[32:0],~q};
-		end
-	end
-end
 assign ops_sign = sign_en&(op1[31]^op2[31]);
-always @(posedge clk or negedge rst) begin
+always @(posedge clk) begin
 	if(!rst) begin
-		Q_reg  <= 'b0;
-		QM_reg <= 'b0;
+		Q_reg   <= 'b0;
+		QM_reg  <= 'b0;
 	end else begin
 		if(state_next==ST_SAMP) begin
 			Q_reg  <= {34{ops_sign}};
 			QM_reg <= {34{ops_sign}};
-			Q_next <= {34{ops_sign}};
-			QM_next<= {34{ops_sign}};
-		end else begin
+		end
+		else begin
 			Q_reg  <= Q_next;
 			QM_reg <= QM_next;
+		end
+	end
+end
+
+always @(*) begin
+	if(!rst) begin
+		Q_next  <= 'b0;
+		QM_next <= 'b0;
+	end else begin
+		if(state_next==ST_SAMP) begin
+			Q_next <= {34{ops_sign}};
+			QM_next<= {34{ops_sign}};
+		end
+		else if(state_reg==ST_DIV) begin
+			if(!n) begin	
+				Q_next  <= {Q_reg[32:0],q};
+			end else begin
+				Q_next  <= {QM_reg[32:0],q};
+			end
+			if(!n & q) begin	
+				QM_next <= {Q_reg[32:0],~q};
+			end else begin
+				QM_next <= {QM_reg[32:0],~q};
+			end
 		end
 	end
 end

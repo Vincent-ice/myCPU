@@ -60,10 +60,20 @@ always @(posedge clk) begin
 end
 
 //Wrf BUS
-assign Wrf_BUS = {gr_we_W && W_valid && !ex_W,dest_W,final_result_W};
+assign Wrf_BUS = {gr_we_W && W_valid && !ex_W,  //37
+                  dest_W,                       //36:32
+                  final_result_W};              //31:0
 
 //Wcsr BUS
-assign Wcsr_BUS = {ex_W && W_valid,ecode_W,esubcode_W,csr_we_W && W_valid,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W};
+assign Wcsr_BUS = {ex_W && W_valid,     //152
+                   ecode_W,             //151:144
+                   esubcode_W,          //143
+                   csr_we_W && W_valid, //142
+                   csr_addr_W,          //141:128
+                   csr_wmask_W,         //127:96
+                   csr_wdata_W,         //95:64
+                   pc_W,                //63:32
+                   vaddr_W};            //31:0
     
 // debug info generate
 assign debug_wb_pc       = pc_W;
