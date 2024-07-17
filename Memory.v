@@ -134,11 +134,25 @@ assign mem_result_M   = res_from_mem_M[3] ? data_sram_rdata                     
 assign final_result_M = |res_from_mem_M ? mem_result_M : rf_wdata_M;
 
 //MW BUS
-assign MW_BUS = {pc_M,final_result_M,gr_we_M,dest_M,vaddr_M,
-                 ex_M,ecode_M,esubcode_M,csr_addr_M,csr_we_M,csr_wmask_M,csr_wdata_M};
+assign MW_BUS = {pc_M,          //190:159
+                 final_result_M,//158:127
+                 gr_we_M,       //126
+                 dest_M,        //125:121
+                 vaddr_M,       //120:89
+                 ex_M,          //88
+                 ecode_M,       //87:80
+                 esubcode_M,    //79
+                 csr_addr_M,    //78:65
+                 csr_we_M,      //64
+                 csr_wmask_M,   //63:32
+                 csr_wdata_M};  //31:0
 
 //MD forward BUS
-assign MD_for_BUS = {dest_M & {5{M_valid && gr_we_M}},final_result_M,
-                     csr_we_M && M_valid,csr_addr_M,csr_wmask_M,csr_wdata_M};
+assign MD_for_BUS = {dest_M & {5{M_valid && gr_we_M}},  //115:111
+                     final_result_M,                    //110:79
+                     csr_we_M && M_valid,               //78
+                     csr_addr_M,                        //77:64 
+                     csr_wmask_M,                       //63:32
+                     csr_wdata_M};                      //31:0
 
 endmodule

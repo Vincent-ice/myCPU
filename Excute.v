@@ -239,12 +239,28 @@ end
 wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
 
 //EM BUS
-assign EM_BUS = {pc_E,rf_wdata_E,gr_we_E,dest_E,res_from_mem_E,data_sram_addr,
-                 ex_E,ecode_E,esubcode_E,csr_addr_E,csr_we_E,csr_wmask_E,csr_wdata_E};
+assign EM_BUS = {pc_E,              //194:163
+                 rf_wdata_E,        //162:131
+                 gr_we_E,           //130
+                 dest_E,            //129:125
+                 res_from_mem_E,    //124:121
+                 data_sram_addr,    //120:89
+                 ex_E,              //88
+                 ecode_E,           //87:80
+                 esubcode_E,        //79
+                 csr_addr_E,        //78:65
+                 csr_we_E,          //64
+                 csr_wmask_E,       //63:32
+                 csr_wdata_E};      //31:0
 
 //ED forward BUS
-assign ED_for_BUS = {res_from_mem_E,dest_E & {5{E_valid && gr_we_E}},rf_wdata_E,
-                     csr_we_E && E_valid,csr_addr_E,csr_wmask_E,csr_wdata_E};
+assign ED_for_BUS = {res_from_mem_E,                    //119:116
+                     dest_E & {5{E_valid && gr_we_E}},  //115:111
+                     rf_wdata_E,                        //110:79
+                     csr_we_E && E_valid,               //78
+                     csr_addr_E,                        //77:64
+                     csr_wmask_E,                       //63:32
+                     csr_wdata_E};                      //31:0
 
 //TLB BUS
 assign CSR2TLB_BUS = CSR2TLB_BUS_E;

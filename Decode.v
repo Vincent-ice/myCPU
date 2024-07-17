@@ -455,9 +455,25 @@ always @(posedge clk) begin
 end
 
 //output manage
-assign Branch_BUS = {br_taken,br_target};
-assign DE_BUS = {pc_D,alu_op,alu_src1,alu_src2,rkd_value,gr_we,mem_we,dest,res_from_mem,
-                 ex_D,ecode_D,esubcode_D,csr_addr,csr_we,csr_value,csr_wmask,csr_wdata,res_from_csr};
-assign CSR2TLB_BUS_D = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_invtlb,invop,CSR2TLB_BUS};
+assign Branch_BUS = {br_taken,  //32
+                     br_target};//31:0
+assign DE_BUS = {pc_D,          //282:251
+                 alu_op,        //250:232
+                 alu_src1,      //231:200
+                 alu_src2,      //199:168
+                 rkd_value,     //167:136
+                 gr_we,         //135
+                 mem_we,        //134:131
+                 dest,          //130:126
+                 res_from_mem,  //125:122
+                 ex_D,          //121
+                 ecode_D,       //120:113
+                 esubcode_D,    //112
+                 csr_addr,      //111:98
+                 csr_we,        //97
+                 csr_value,     //96:65
+                 csr_wmask,     //64:33
+                 csr_wdata,     //32:1
+                 res_from_csr}; //0
 
 endmodule
