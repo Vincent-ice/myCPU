@@ -195,7 +195,7 @@ assign data_sram_we    = E_valid && !ex_E ? mem_we_E[3] ? 4'b1111               
                                             mem_we_E[0] ? (vaddr[1] ? vaddr[0] ? 4'b1000 : 4'b0100 : vaddr[0] ? 4'b0010 : 4'b0001)
                                                         : 4'b0000
                                           : 4'b0000;
-assign data_sram_addr  = vaddr;
+assign data_sram_addr  = paddr;
 assign data_sram_wdata = mem_we_E[3] ? rkd_value_E            : 
                          mem_we_E[1] ? {2{rkd_value_E[15:0]}} :
                          mem_we_E[0] ? {4{rkd_value_E[7:0]}}  : 32'b0;
@@ -244,7 +244,7 @@ assign EM_BUS = {pc_E,              //194:163
                  gr_we_E,           //130
                  dest_E,            //129:125
                  res_from_mem_E,    //124:121
-                 data_sram_addr,    //120:89
+                 vaddr,             //120:89
                  ex_E,              //88
                  ecode_E,           //87:80
                  esubcode_E,        //79

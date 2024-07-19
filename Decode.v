@@ -357,7 +357,6 @@ csrReg u_csrReg(
     .has_int   (has_int   ),
     .int_ecode (int_ecode ),
     .new_pc    (era_pc    ),
-    .ertn_flush(ertn_flush),
     .ex_entryPC(ex_entryPC),
     .counter   (counter   ),
     .counterID (counterID ),

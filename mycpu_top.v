@@ -276,7 +276,6 @@ Writeback u_Writeback(
 
 tlb #(`TLBNUM) u_tlb(
     .clk          (clk         ),
-    .rstn         (resetn      ),
     .s0_vppn      (s0_vppn     ),
     .s0_va_bit12  (s0_va_bit12 ),
     .s0_asid      (s0_asid     ),

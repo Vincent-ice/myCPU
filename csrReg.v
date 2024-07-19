@@ -106,6 +106,46 @@ reg  timer_en;
 
 reg  LLbit;
 
+//TLB
+wire        inst_tlbfill;
+wire        inst_tlbsrch;
+wire        inst_tlbrd;
+wire        s1_found;
+wire [$clog2(`TLBNUM)-1:0] s1_index;
+wire        wen;
+wire [$clog2(`TLBNUM)-1:0] w_index;
+wire        w_e;
+wire [18:0] w_vppn;
+wire [ 5:0] w_ps;
+wire [ 9:0] w_asid;
+wire        w_g;
+wire [19:0] w_ppn0;
+wire [ 1:0] w_plv0;
+wire [ 1:0] w_mat0;
+wire        w_d0;
+wire        w_v0;
+wire [19:0] w_ppn1;
+wire [ 1:0] w_plv1;
+wire [ 1:0] w_mat1;
+wire        w_d1;
+wire        w_v1;
+wire [$clog2(`TLBNUM)-1:0] r_index;
+wire        r_e;
+wire [18:0] r_vppn;
+wire [ 5:0] r_ps;
+wire [ 9:0] r_asid;
+wire        r_g;
+wire [19:0] r_ppn0;
+wire [ 1:0] r_plv0;
+wire [ 1:0] r_mat0;
+wire        r_d0;
+wire        r_v0;
+wire [19:0] r_ppn1;
+wire [ 1:0] r_plv1;
+wire [ 1:0] r_mat1;
+wire        r_d1;
+wire        r_v1;
+
 //inturrupt
 wire [12:0] int = csr_ECFG[12:0] & csr_ESTAT[12:0] & {13{`CSR_CRMD_IE}};
 assign has_int = |int;
@@ -201,6 +241,10 @@ always @(posedge clk ) begin
         `CSR_CRMD_PLV <= `CSR_PRMD_PPLV;
         `CSR_CRMD_IE  <= `CSR_PRMD_PIE ;
     end 
+    else if (inst_tlbfill) begin
+        `CSR_CRMD_DA  <= 1'b1;
+        `CSR_CRMD_PG  <= 1'b0;
+    end
     else if (CRMD_we) begin
         csr_CRMD[8:0] <= csr_wdata[8:0] & csr_wmask[8:0] | ~csr_wmask[8:0] & csr_CRMD[8:0];
     end
@@ -463,45 +507,6 @@ always @(posedge clk) begin
     end
 end
 
-//TLB
-wire        inst_tlbfill;
-wire        inst_tlbsrch;
-wire        inst_tlbrd;
-wire        s1_found;
-wire [$clog2(`TLBNUM)-1:0] s1_index;
-wire        wen;
-wire [$clog2(`TLBNUM)-1:0] w_index;
-wire        w_e;
-wire [18:0] w_vppn;
-wire [ 5:0] w_ps;
-wire [ 9:0] w_asid;
-wire        w_g;
-wire [19:0] w_ppn0;
-wire [ 1:0] w_plv0;
-wire [ 1:0] w_mat0;
-wire        w_d0;
-wire        w_v0;
-wire [19:0] w_ppn1;
-wire [ 1:0] w_plv1;
-wire [ 1:0] w_mat1;
-wire        w_d1;
-wire        w_v1;
-wire [$clog2(`TLBNUM)-1:0] r_index;
-wire        r_e;
-wire [18:0] r_vppn;
-wire [ 5:0] r_ps;
-wire [ 9:0] r_asid;
-wire        r_g;
-wire [19:0] r_ppn0;
-wire [ 1:0] r_plv0;
-wire [ 1:0] r_mat0;
-wire        r_d0;
-wire        r_v0;
-wire [19:0] r_ppn1;
-wire [ 1:0] r_plv1;
-wire [ 1:0] r_mat1;
-wire        r_d1;
-wire        r_v1;
 
 // CSR <= TLB
 assign  {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,s1_found,s1_index,r_e,r_vppn,r_ps,r_asid,r_g,
