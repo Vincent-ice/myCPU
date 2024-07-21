@@ -10,6 +10,7 @@ module Writeback (
 
     output [`Wrf_BUS_Wid-1:0]   Wrf_BUS,
     output [`Wcsr_BUS_Wid-1:0]  Wcsr_BUS,
+    output [`PB_BUS_Wid-1:0]    PB_BUS,
 
     input                       ex_en,
 
@@ -21,6 +22,7 @@ module Writeback (
 
 //MW BUS
 reg [`MW_BUS_Wid-1:0] MW_BUS_W;
+wire [`WpD_BUS_Wid-1:0] PB_BUS_W;
 wire [31:0] pc_W;
 wire [31:0] final_result_W;
 wire        gr_we_W;
@@ -34,7 +36,7 @@ wire        csr_we_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
 
-assign {pc_W,final_result_W,gr_we_W,dest_W,vaddr_W,
+assign {PB_BUS_W,pc_W,final_result_W,gr_we_W,dest_W,vaddr_W,
         ex_W,ecode_W,esubcode_W,csr_addr_W,csr_we_W,csr_wmask_W,csr_wdata_W} = MW_BUS_W;
 
 //pipeline handshake
@@ -50,12 +52,12 @@ always @(posedge clk) begin
         W_valid <= 1'b0;
         MW_BUS_W <= 'b0;
     end
-    else if (W_allowin) begin
-        W_valid <= MW_valid;
-    end
-
-    if (MW_valid && W_allowin) begin
+    else if (MW_valid && W_allowin) begin
         MW_BUS_W <= MW_BUS;
+    end
+    
+    if (W_allowin) begin
+        W_valid <= MW_valid;
     end
 end
 
@@ -74,7 +76,10 @@ assign Wcsr_BUS = {ex_W && W_valid,     //152
                    csr_wdata_W,         //95:64
                    pc_W,                //63:32
                    vaddr_W};            //31:0
-    
+
+//PB BUS
+assign PB_BUS = {PB_BUS_W & {`WpD_BUS_Wid{W_valid}},pc_W};
+
 // debug info generate
 assign debug_wb_pc       = pc_W;
 assign debug_wb_rf_we    = {4{gr_we_W && W_valid && !ex_W}};

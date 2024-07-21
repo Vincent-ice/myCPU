@@ -24,6 +24,7 @@ module Excute (
     
 //DE BUS
 reg [`DE_BUS_Wid-1:0] DE_BUS_E;
+wire [`WpD_BUS_Wid-1:0] PB_BUS_E;
 wire [31:0] pc_E;
 wire [`alu_op_Wid-1:0] alu_op_E;
 wire [31:0] alu_src1_E;
@@ -44,7 +45,7 @@ wire [31:0] csr_wmask_E;
 wire [31:0] csr_wdata_E;
 wire        res_from_csr_E;
 
-assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
+assign {PB_BUS_E,pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
         ex_D,ecode_D,esubcode_D,csr_addr_E,csr_we_E,csr_rdata_E,csr_wmask_E,csr_wdata_E,res_from_csr_E} = DE_BUS_E;
 
 //pipeline handshake
@@ -62,12 +63,12 @@ always @(posedge clk) begin
     else if (ex_en) begin
         DE_BUS_E <= 'b0;
     end
-    else if (E_allowin) begin
-        E_valid <= DE_valid && (!ex_flag && !ex_E || ex_en);
-    end
-
-    if (DE_valid && E_allowin) begin
+    else if (DE_valid && E_allowin) begin
         DE_BUS_E <= DE_BUS;
+    end
+    
+    if (E_allowin) begin
+        E_valid <= DE_valid && (!ex_flag && !ex_E && !ex_en);
     end
 end
 
@@ -82,7 +83,7 @@ alu u_alu(
     .alu_src1     (alu_src1_E  ),
     .alu_src2     (alu_src2_E  ),
     .alu_result   (alu_result_E),
-    .div_stall    (stall       )
+    .stall        (stall       )
     );
 
 //data sram manage
@@ -123,7 +124,8 @@ end
 wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
 
 //EM BUS
-assign EM_BUS = {pc_E,              //194:163
+assign EM_BUS = {PB_BUS_E,          //261:195
+                 pc_E,              //194:163
                  rf_wdata_E,        //162:131
                  gr_we_E,           //130
                  dest_E,            //129:125

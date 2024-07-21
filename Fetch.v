@@ -3,20 +3,22 @@ module Fetch (
     input                           clk,
     input                           rstn,
 
+    input    [`predict_BUS_Wid-1:0] predict_BUS,
     input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
     input                           ex_en,
     input    [31:0]                 ex_entryPC,
     input                           ertn_flush,
     input    [31:0]                 new_pc,
 
-    input                           D_allowin,  
+    input                           pD_allowin,  
 
-    output                          FD_valid,
-    output   [`FD_BUS_Wid-1:0]      FD_BUS,
+    output                          FpD_valid,
+    output   [`FpD_BUS_Wid-1:0]     FpD_BUS,
 
     output                          inst_sram_en,
     output   [3:0]                  inst_sram_we,
-    output   [31:0]                 inst_sram_addr,inst_sram_wdata
+    output   [31:0]                 inst_sram_addr,
+    output   [31:0]                 inst_sram_wdata
 
 );
 
@@ -25,13 +27,16 @@ wire br_taken;
 wire [31:0] br_target;
 assign {br_taken,br_target} = Branch_BUS;
 
+wire        predict_taken  = predict_BUS[32];
+wire [31:0] predict_target = predict_BUS[31:0];
+
 //pipeline handshake
 wire ex_F;
 reg  F_valid;
 wire F_valid_next   = rstn;//next cycle valid
 wire F_ready_go     = 1'b1;//ready send to next stage
-wire F_allowin      = !F_valid || ex_en || F_ready_go && D_allowin && !ex_F;//allow input data
-assign FD_valid     = F_valid_next && F_ready_go;//validity of D stage
+wire F_allowin      = !F_valid || ex_en || F_ready_go && pD_allowin && !ex_F;//allow input data
+assign FpD_valid     = F_valid_next && F_ready_go;//validity of D stage
 always @(posedge clk) begin
     if (!rstn) begin
         F_valid <= 1'b0;
@@ -50,6 +55,7 @@ wire [31:0] pc_plus4 = pc_reg + 32'd4;
 assign pc_en = F_valid_next && F_allowin;
 assign pc_next = br_taken   ? (F_valid ? br_target : pc_plus4) : 
                  ex_en      ? ex_entryPC                       :
+                 predict_taken ? predict_target                :
                  ertn_flush ? new_pc                           : pc_plus4;
 
 always @(posedge clk) begin
@@ -66,7 +72,7 @@ wire [ 7:0] ecode_F    = ex_F ? `ECODE_ADEF : 8'h00;
 wire        esubcode_F = `ESUBCODE_ADEF;
 
 //FD BUS
-assign FD_BUS = {inst_sram_addr,//42:11
+assign FpD_BUS = {pc_next,      //42:11
                  pc_en,         //10
                  ex_F,          //9
                  ecode_F,       //8:1

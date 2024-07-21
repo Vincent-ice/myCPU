@@ -6,7 +6,7 @@ module alu(
   input  wire [31:0] alu_src1,
   input  wire [31:0] alu_src2,
   output wire [31:0] alu_result,
-  output wire        div_stall
+  output wire        stall
 );
  
 wire op_add;   //add operation
@@ -106,15 +106,28 @@ assign sr_result   = sr64_result[31:0];
  
 // MUL, MULH, MULHU result
 multCore u_multCore(
+  .clk     (clk               ),
+  .rstn    (rstn              ),
   .op1     (alu_src1          ),
   .op2     (alu_src2          ),
   .sign_en (op_mul | op_mulh  ),
   .out     (mul_result        )
-);
+);//2-cycle multiply
 /* wire signed [63:0] mul_sign = $signed(alu_src1) * $signed(alu_src2);
 wire        [63:0] mul_unsign = alu_src1 * alu_src2;
 assign mul_result = (op_mul | op_mulh) ? mul_sign : mul_unsign; */
 
+wire mult_stall;
+reg  mult_stall_delay;
+always @(posedge clk) begin
+    if (!rstn) begin
+        mult_stall_delay <= 1'b0;
+    end
+    else begin
+        mult_stall_delay <= mult_stall;
+    end
+end
+assign mult_stall = (op_mul | op_mulh | op_mulhu) ^ mult_stall_delay;
 // DIV, DIVU, MOD, MODU result
 wire div_ready;
 reg  div_ready_delay;
@@ -200,6 +213,9 @@ assign quo_result = dividend_is_0    ? 32'b0                          :
                                         find_buff[5] ? quo_history[5] :
                                         find_buff[6] ? quo_history[6] :
                                         find_buff[7] ? quo_history[7] : 32'b0) : quo;
+
+// stall signal
+assign stall = mult_stall | div_stall;
 
 // final result mux
 assign alu_result = ({32{op_add|op_sub}} & add_sub_result)

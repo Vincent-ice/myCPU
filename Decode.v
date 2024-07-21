@@ -3,10 +3,9 @@ module Decode (
     input                           clk,
     input                           rstn,
 
-    input                           FD_valid,
-    input [`FD_BUS_Wid-1:0]         FD_BUS,
+    input                           pDD_valid,
+    input [`pDD_BUS_Wid-1:0]        pDD_BUS,
 
-    input [31:0]                    inst_sram_rdata,
     input [ 7:0]                    hardware_interrupt,
     
     input                           E_allowin,
@@ -20,6 +19,8 @@ module Decode (
     output                          DE_valid,
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
+    input                           BTB_stall_i,
+    output                          predict_error,
     output [`Branch_BUS_Wid-1:0]    Branch_BUS,
     output                          ex_en,
     output [31:0]                   ex_entryPC,
@@ -27,11 +28,66 @@ module Decode (
     output [31:0]                   new_pc
 );
 
+//pDD BUS
+reg  [`pDD_BUS_Wid-1:0] pDD_BUS_D;
+wire [31:0] pc_D;
+wire [31:0] inst_D;
+wire        pc_en_D;
+wire        ex_pD;
+wire [ 7:0] ecode_pD;
+wire        esubcode_pD;
+wire [63:0] op_31_26_d;
+wire        inst_jirl;
+wire        inst_b;
+wire        inst_bl;
+wire        inst_beq;
+wire        inst_bne;
+wire        inst_blt;
+wire        inst_bge;
+wire        inst_bltu;
+wire        inst_bgeu;
+reg         BTB_stall;
+wire        predict_taken;
+wire [31:0] predict_target;
 
-//inst
-wire [31:0] inst_D = rstn ? inst_sram_rdata : 32'b0;
+assign {pc_D,inst_D,pc_en_D,ex_pD,ecode_pD,esubcode_pD,op_31_26_d,
+        inst_jirl,inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
+        predict_taken,predict_target} = pDD_BUS_D;
 
-wire [ 5:0] op_31_26 = inst_D[31:26];
+//pipeline handshake
+reg  D_valid;
+reg  ex_flag;
+wire ex_D;
+wire load_stall;
+wire D_ready_go    = D_valid & ~load_stall;
+assign D_allowin   = !D_valid || D_ready_go && E_allowin;
+assign DE_valid    = D_valid && D_ready_go;
+always @(posedge clk) begin
+    if (!rstn) begin
+        D_valid <= 1'b0;
+        pDD_BUS_D <= 'b0;
+    end
+    else if (ex_en) begin
+        pDD_BUS_D <= 'b0;
+    end
+    else if (pDD_valid && D_allowin) begin
+        pDD_BUS_D <= pDD_BUS;
+    end
+    
+    if (D_allowin) begin
+        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) && !ertn_flush && !predict_error && !BTB_stall;
+    end
+end
+
+always @(posedge clk) begin
+    if (!rstn) begin
+        BTB_stall <= 1'b0;
+    end else begin
+        BTB_stall <= BTB_stall_i;
+    end
+end
+
+//inst decode
 wire [ 3:0] op_25_22 = inst_D[25:22];
 wire [ 1:0] op_21_20 = inst_D[21:20];
 wire [ 4:0] op_19_15 = inst_D[19:15];
@@ -46,47 +102,11 @@ wire [19:0] i20 = inst_D[24: 5];
 wire [15:0] i16 = inst_D[25:10];
 wire [25:0] i26 = {inst_D[ 9: 0], inst_D[25:10]};
 
-wire [63:0] op_31_26_d;
 wire [15:0] op_25_22_d;
 wire [ 3:0] op_21_20_d;
 wire [31:0] op_19_15_d;
 wire [31:0] op_14_10_d;
 
-//FD BUS
-reg  [`FD_BUS_Wid-1:0] FD_BUS_D;
-wire        pc_en_D;
-wire [31:0] pc_D;
-wire        ex_F;
-wire [ 7:0] ecode_F;
-wire        esubcode_D;
-
-assign {pc_D,pc_en_D,ex_F,ecode_F,esubcode_D} = FD_BUS_D;
-
-//pipeline handshake
-reg  D_valid;
-reg  ex_flag;
-wire ex_D;
-wire load_stall;
-wire D_ready_go    = D_valid & ~load_stall;
-assign D_allowin   = !D_valid || D_ready_go && E_allowin;
-assign DE_valid    = D_valid && D_ready_go;
-always @(posedge clk) begin
-    if (!rstn) begin
-        D_valid <= 1'b0;
-        FD_BUS_D <= 'b0;
-    end
-    else if (D_allowin) begin
-        D_valid <= FD_valid && (!ex_flag && !ex_D || ex_en);
-    end
-
-    if (FD_valid && D_allowin) begin
-        FD_BUS_D <= FD_BUS;
-    end
-end
-
-
-//inst decode
-decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
 decoder_4_16 u_dec1(.in(op_25_22 ), .out(op_25_22_d ));
 decoder_2_4  u_dec2(.in(op_21_20 ), .out(op_21_20_d ));
 decoder_5_32 u_dec3(.in(op_19_15 ), .out(op_19_15_d ));
@@ -120,15 +140,7 @@ wire inst_andi   = op_31_26_d[6'h00] & op_25_22_d[4'hd];
 wire inst_ori    = op_31_26_d[6'h00] & op_25_22_d[4'he]; 
 wire inst_xori   = op_31_26_d[6'h00] & op_25_22_d[4'hf]; 
 wire inst_pcaddu12i= op_31_26_d[6'h7] & ~inst_D[25];
-wire inst_jirl   = op_31_26_d[6'h13];
-wire inst_b      = op_31_26_d[6'h14];
-wire inst_bl     = op_31_26_d[6'h15];
-wire inst_beq    = op_31_26_d[6'h16];
-wire inst_bne    = op_31_26_d[6'h17];
-wire inst_blt    = op_31_26_d[6'h18];
-wire inst_bge    = op_31_26_d[6'h19];
-wire inst_bltu   = op_31_26_d[6'h1a];
-wire inst_bgeu   = op_31_26_d[6'h1b];
+
 wire inst_ld_b   = op_31_26_d[6'h0a] & op_25_22_d[4'h0];
 wire inst_ld_h   = op_31_26_d[6'h0a] & op_25_22_d[4'h1];
 wire inst_ld_bu  = op_31_26_d[6'h0a] & op_25_22_d[4'h8];
@@ -320,7 +332,7 @@ wire [31:0] counterID;
 assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
 assign ertn_flush = inst_ertn && D_valid;
 assign ex_en      = ex_en_W;
-assign ex_pc      = ex_F ? pc_D - 32'd4 : pc_W;
+assign ex_pc      = ex_pD ? pc_D - 32'd4 : pc_W;
 
 csrReg u_csrReg(
     .clk       (clk       ),
@@ -366,17 +378,17 @@ wire        rj_eq_rd;
 wire        rj_lt_rd;
 wire        rj_ltu_rd;
 wire [31:0] out;
-wire        onverflow;
+wire        overflow;
 wire        sign_bit;
-wire        br_taken;
 wire [31:0] br_target;
 wire [31:0] br_offs;
 wire [31:0] jirl_offs;
+wire        br_taken;
+
 
 assign {sign_bit, out} = {1'b0, rj_value} + {1'b1, ~rkd_value} + 33'd1;
 assign rj_eq_rd = (rj_value == rkd_value);
 assign overflow = (rj_value[31] ^ rkd_value[31]) & (rj_value[31] ^ out[31]);
-assign rj_eq_rd = (rj_value == rkd_value);
 assign rj_lt_rd = out[31] ^ overflow;
 assign rj_ltu_rd= sign_bit;
 assign br_taken = (   inst_beq  &&  rj_eq_rd
@@ -388,16 +400,27 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bge  && !rj_lt_rd
                    || inst_bltu &&  rj_ltu_rd
                    || inst_bgeu && !rj_ltu_rd
-                   ) && rstn && !ex_en;
+                   ) && D_valid && !ex_en;
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ; 
 assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
 
-assign br_target = (inst_beq || inst_bne || inst_bl   || inst_b    ||
+assign br_target = predict_taken & !br_taken ? pc_D + 32'd4 :
+                   (inst_beq || inst_bne || inst_bl   || inst_b    ||
                     inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (pc_D + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
+wire   direct_jump   = inst_jirl | inst_bl | inst_b;
+wire   indirect_jump = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
+
+assign predict_error = (direct_jump | indirect_jump) & !BTB_stall & D_valid & !ex_en &
+                       (br_taken & predict_taken & (br_target != predict_target) | (br_taken ^ predict_taken));
+
+wire   br_taken_final = predict_error | (D_valid & BTB_stall);   
+
+assign Branch_BUS = {br_taken_final,  //32
+                     br_target};      //31:0
 //alu data input manage
 wire  [31:0] alu_src1;
 wire  [31:0] alu_src2;
@@ -417,13 +440,14 @@ wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu &
                          ~inst_ld_b && ~inst_ld_h && ~inst_ld_bu && ~inst_ld_hu && ~inst_ld_w && ~inst_st_b && ~inst_st_h && ~inst_st_w && 
                          ~inst_lu12i_w && ~inst_csrrd && ~inst_csrwr && ~inst_csrxchg && ~inst_ertn && ~inst_break && ~inst_syscall &&
                          ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w;
-assign     ex_D    = D_ready_go && (ex_F | inst_syscall | inst_break | unknownInst | has_int);
+assign     ex_D    = D_ready_go && (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
-                     ex_F         ? ecode_F    :
+                     ex_pD        ? ecode_pD    :
                      has_int      ? int_ecode  :
                      inst_syscall ? `ECODE_SYS :
                      inst_break   ? `ECODE_BRK :
                      unknownInst  ? `ECODE_INE : 8'b0;
+wire       esubcode_D = esubcode_pD;
 
 always @(posedge clk) begin
     if (!rstn) begin
@@ -438,9 +462,12 @@ always @(posedge clk) begin
 end
 
 //output manage
-assign Branch_BUS = {br_taken,  //32
-                     br_target};//31:0
-assign DE_BUS = {pc_D,          //282:251
+assign DE_BUS = {inst_D,        //349:318
+                 direct_jump,   //317
+                 indirect_jump, //316
+                 br_taken,      //315
+                 br_target,     //314:283
+                 pc_D,          //282:251
                  alu_op,        //250:232
                  alu_src1,      //231:200
                  alu_src2,      //199:168
