@@ -20,7 +20,9 @@ module Decode (
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
     input                           BTB_stall_i,
-    input                           predict_error,
+    output                          predict_error_D,
+    input                           predict_error_E,
+    output [`Branch_BUS_Wid-1:0]    Branch_BUS_D,
     output                          ex_en,
     output [31:0]                   ex_entryPC,
     output                          ertn_flush,
@@ -46,7 +48,6 @@ wire        inst_bge;
 wire        inst_bltu;
 wire        inst_bgeu;
 reg         BTB_stall;
-reg         BTB_stall_delay;
 wire        predict_direct_taken;
 wire        predict_indirect_taken;
 wire [31:0] predict_target;
@@ -76,23 +77,15 @@ always @(posedge clk) begin
     end
     
     if (D_allowin) begin
-        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) &&
-                   !predict_error && !BTB_stall && !BTB_stall_delay && !ertn_flush;
+        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) && !ertn_flush && !predict_error_D && !predict_error_E && !BTB_stall;
     end
 end
 
 always @(posedge clk) begin
     if (!rstn) begin
         BTB_stall <= 1'b0;
-        BTB_stall_delay <= 1'b0;
-    end 
-    else if (predict_error) begin
-        BTB_stall <= 1'b0;
-        BTB_stall_delay <= 1'b0;
-    end
-    else begin
+    end else begin
         BTB_stall <= BTB_stall_i;
-        BTB_stall_delay <= BTB_stall;
     end
 end
 
@@ -410,18 +403,28 @@ wire        rj_ltu_rd;
 wire [31:0] out;
 wire        overflow;
 wire        sign_bit;
+wire [31:0] br_target;
 wire [31:0] br_offs;
+wire [31:0] br_PC;
+wire [31:0] jirl_PC;
 wire [31:0] jirl_offs;
-wire [31:0] offs;
-wire        predict_taken = predict_direct_taken | predict_indirect_taken;
+
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ; 
 assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
-assign offs      = (inst_bl || inst_b || inst_beq || inst_bne ||
-                    inst_blt || inst_bge || inst_bltu || inst_bgeu) ? br_offs   :
-                    inst_jirl                                       ? jirl_offs :
-                                                                      32'b0;
+assign br_PC     = pc_D + br_offs;
+assign jirl_PC   = rj_value + jirl_offs;
+wire   direct_jump = inst_jirl | inst_bl | inst_b;
+assign br_target = (inst_bl || inst_b)              ? br_PC   :
+                    inst_jirl                       ? jirl_PC:
+                                                      predict_target;
 
+assign predict_error_D = !BTB_stall & D_valid & !ex_en & (br_target != predict_target);
+
+wire   br_taken_final = predict_error_D | (D_valid & BTB_stall);   
+
+assign Branch_BUS_D = {br_taken_final,  //32
+                       br_target};      //31:0
 //alu data input manage
 reg  [31:0] alu_src1;
 reg  [31:0] alu_src2;
@@ -443,7 +446,6 @@ always @(*) begin
         default        : alu_src2 = rkd_value;
     endcase
 end
-wire [31:0] rf_data = inst_jirl ? rj_value : rkd_value;
 
 //exception manage
 wire       unknownInst = !{|{inst_add_w,inst_sub_w,inst_slt,inst_sltu,inst_nor,inst_and,inst_or,inst_xor,
@@ -476,17 +478,18 @@ always @(posedge clk) begin
 end
 
 //output manage
-assign DE_BUS = {inst_D,        //388:357
-                 inst_b,inst_bl,inst_jirl,   //356:354
-                 predict_taken,//353
+assign DE_BUS = {inst_D,        //418:387
+                 direct_jump,   //386
+                 br_target,     //385:354
+                 predict_indirect_taken,//353
                  predict_target,//352:321
                  inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu, //320:315
-                 offs,         //314:283
+                 br_PC,         //314:283
                  pc_D,          //282:251
                  alu_op,        //250:232
                  alu_src1,      //231:200
                  alu_src2,      //199:168
-                 rf_data,       //167:136
+                 rkd_value,     //167:136
                  gr_we,         //135
                  mem_we,        //134:131
                  dest,          //130:126

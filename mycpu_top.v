@@ -28,7 +28,8 @@ wire [`pDD_BUS_Wid-1:0]         pDD_BUS;
 wire                            DE_valid;
 wire [`DE_BUS_Wid-1:0]          DE_BUS;
 wire [`predict_BUS_Wid-1:0]     predict_BUS;
-wire [`Branch_BUS_Wid-1:0]      Branch_BUS;
+wire [`Branch_BUS_Wid-1:0]      Branch_BUS_D;
+wire [`Branch_BUS_Wid-1:0]      Branch_BUS_E;
 wire                            EM_valid;
 wire [`EM_BUS_Wid-1:0]          EM_BUS;
 wire                            MW_valid;
@@ -50,14 +51,16 @@ wire                            ertn_flush;
 wire [31:0]                     new_pc;
 
 wire                            BTB_stall;
-wire                            predict_error;
+wire                            predict_error_D;
+wire                            predict_error_E;
 wire [ 7:0]                     hardware_interrupt = 8'b0;
 
 Fetch u_Fetch(
     .clk             (clk             ),
     .rstn            (resetn          ),
     .predict_BUS     (predict_BUS     ),
-    .Branch_BUS      (Branch_BUS      ),
+    .Branch_BUS_D    (Branch_BUS_D    ),
+    .Branch_BUS_E    (Branch_BUS_E    ),
     .ex_en           (ex_en           ),
     .ex_entryPC      (ex_entryPC      ),
     .ertn_flush      (ertn_flush      ),
@@ -84,7 +87,8 @@ preDecode u_preDecode(
     .PB_BUS          (PB_BUS          ),
     .inst_sram_rdata (inst_sram_rdata ),
     .BTB_stall       (BTB_stall       ),
-    .predict_error   (predict_error   ),
+    .predict_error_D (predict_error_D ),
+    .predict_error_E (predict_error_E ),
     .ertn_flush      (ertn_flush      ),
     .ex_en           (ex_en           )
 );
@@ -104,7 +108,9 @@ Decode u_Decode(
     .DE_valid           (DE_valid           ),
     .DE_BUS             (DE_BUS             ),
     .BTB_stall_i        (BTB_stall          ),
-    .predict_error      (predict_error      ),
+    .predict_error_D    (predict_error_D    ),
+    .predict_error_E    (predict_error_E    ),
+    .Branch_BUS_D       (Branch_BUS_D       ),
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
     .ertn_flush         (ertn_flush         ),
@@ -122,8 +128,8 @@ Excute u_Excute(
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
     .ex_en           (ex_en           ),
-    .predict_error   (predict_error   ),
-    .Branch_BUS      (Branch_BUS      ),
+    .predict_error_E (predict_error_E ),
+    .Branch_BUS_E    (Branch_BUS_E    ),
     .data_sram_en    (data_sram_en    ),
     .data_sram_we    (data_sram_we    ),
     .data_sram_addr  (data_sram_addr  ),

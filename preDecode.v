@@ -19,7 +19,8 @@ module preDecode (
     input  [31:0]               inst_sram_rdata,
 
     output                      BTB_stall,
-    input                       predict_error,
+    input                       predict_error_D,
+    input                       predict_error_E,
     input                       ertn_flush,
     input                       ex_en
 );
@@ -114,7 +115,7 @@ generate
     end
 endgenerate
 
-assign BTB_stall = pD_valid & !predict_error & !ex_en & (!(|BTB_hit) & (inst_jirl | inst_b | inst_bl));
+assign BTB_stall = pD_valid & !predict_error_D & !predict_error_E & !ex_en & (!(|BTB_hit) & (inst_jirl | inst_b | inst_bl));
 
 generate
     for (i = 0;i < 32;i = i + 1) begin

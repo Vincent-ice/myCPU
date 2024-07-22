@@ -15,8 +15,8 @@ module Excute (
     output  [`ED_for_BUS_Wid-1:0]   ED_for_BUS,
 
     input                       ex_en,
-    output                      predict_error,
-    output  [`Branch_BUS_Wid-1:0]  Branch_BUS,
+    output                      predict_error_E,
+    output  [`Branch_BUS_Wid-1:0]  Branch_BUS_E,
 
     output                      data_sram_en,
     output reg [ 3:0]           data_sram_we,
@@ -28,17 +28,17 @@ module Excute (
 reg [`DE_BUS_Wid-1:0] DE_BUS_E;
 wire [`WpD_BUS_Wid-1:0] PB_BUS_E;
 wire [31:0] inst_E;
-wire        inst_b,inst_bl,inst_jirl;
 wire        direct_jump;
+wire [31:0] br_direct_target;
 wire        predict_indirect_taken;
 wire [31:0] predict_target;
 wire        inst_beq,inst_bne,inst_bge,inst_blt,inst_bgeu,inst_bltu;
-wire [31:0] br_offs;
+wire [31:0] br_PC;
 wire [31:0] pc_E;
 wire [`alu_op_Wid-1:0] alu_op_E;
 wire [31:0] alu_src1_E;
 wire [31:0] alu_src2_E;
-wire [31:0] rf_data;
+wire [31:0] rkd_value_E;
 wire        gr_we_E;
 wire [ 3:0] mem_we_E;
 wire [ 4:0] dest_E;
@@ -54,8 +54,8 @@ wire [31:0] csr_wmask_E;
 wire [31:0] csr_wdata_E;
 wire        res_from_csr_E;
 
-assign {inst_E,inst_b,inst_bl,inst_jirl,predict_indirect_taken,predict_target,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,br_offs,
-        pc_E,alu_op_E,alu_src1_E,alu_src2_E,rf_data,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
+assign {inst_E,direct_jump,br_direct_target,predict_indirect_taken,predict_target,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,br_PC,
+        pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
         ex_D,ecode_D,esubcode_D,csr_addr_E,csr_we_E,csr_rdata_E,csr_wmask_E,csr_wdata_E,res_from_csr_E} = DE_BUS_E;
 
 //pipeline handshake
@@ -78,13 +78,13 @@ always @(posedge clk) begin
     end
     
     if (E_allowin) begin
-        E_valid <= DE_valid && (!ex_flag && !ex_E && !ex_en) && !predict_error;
+        E_valid <= DE_valid && (!ex_flag && !ex_E && !ex_en) && !predict_error_E;
     end
 end
 
 //ALU
 wire [31:0] alu_result_E;
-wire [`alu_op_Wid-1:0] alu_op = !ex_flag & !ex_E & E_valid ? alu_op_E : `alu_op_Wid'b0;
+wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_flag}};
 wire        alu_overflow;
 
 alu u_alu(
@@ -123,9 +123,9 @@ assign data_sram_addr  = vaddr_E;
 
 always @(*) begin
     case (mem_we_E)
-        4'b0001 : data_sram_wdata = {4{rf_data[7:0]}};
-        4'b0011 : data_sram_wdata = {2{rf_data[15:0]}};
-        4'b1111 : data_sram_wdata = rf_data;
+        4'b0001 : data_sram_wdata = {4{rkd_value_E[7:0]}};
+        4'b0011 : data_sram_wdata = {2{rkd_value_E[15:0]}};
+        4'b1111 : data_sram_wdata = rkd_value_E;
         default : data_sram_wdata = 32'b0;
     endcase
 end
@@ -160,9 +160,7 @@ wire rj_lt_rd = alu_result_E[0];
 wire rj_ltu_rd= alu_result_E[0];
 reg  br_taken;
 wire br_taken_final;
-wire [31:0] br_PC = inst_jirl ? rf_data + br_offs : pc_E + br_offs;
 wire [31:0] br_target_final;
-assign direct_jump = inst_b | inst_bl | inst_jirl;
 always @(*) begin
     case (1'b1)
         inst_beq  : br_taken = rj_eq_rd;
@@ -171,20 +169,20 @@ always @(*) begin
         inst_bge  : br_taken = !rj_lt_rd;
         inst_bltu : br_taken = rj_ltu_rd;
         inst_bgeu : br_taken = !rj_ltu_rd;
-        direct_jump:br_taken = 1'b1;
         default   : br_taken = 1'b0;
     endcase
 end
 
-assign predict_error = E_valid & (br_taken ^ predict_indirect_taken ||
-                       br_taken & predict_indirect_taken & (br_PC != predict_target));
-assign br_taken_final = predict_error;
+assign predict_error_E = br_taken ^ predict_indirect_taken ||
+                         br_taken & predict_indirect_taken & (br_PC != predict_target);
+assign br_taken_final = E_valid && predict_error_E;
 assign br_target_final= br_taken ? br_PC : pc_E + 32'd4;
 
-assign Branch_BUS = {br_taken_final,br_target_final};
+assign Branch_BUS_E = {br_taken_final,br_target_final};
 
 wire   indirect_jump = inst_beq || inst_bne || inst_blt || inst_bge || inst_bltu || inst_bgeu;
-assign PB_BUS_E = {inst_E,direct_jump,indirect_jump,br_taken,br_PC};
+wire [31:0] br_target = direct_jump ? br_direct_target : br_PC;
+assign PB_BUS_E = {inst_E,direct_jump,indirect_jump,br_taken,br_target};
 //EM BUS
 assign EM_BUS = {PB_BUS_E,          //261:195
                  pc_E,              //194:163

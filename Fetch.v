@@ -4,7 +4,8 @@ module Fetch (
     input                           rstn,
 
     input    [`predict_BUS_Wid-1:0] predict_BUS,
-    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
+    input    [`Branch_BUS_Wid-1:0]  Branch_BUS_D,
+    input    [`Branch_BUS_Wid-1:0]  Branch_BUS_E,
     input                           ex_en,
     input    [31:0]                 ex_entryPC,
     input                           ertn_flush,
@@ -23,9 +24,12 @@ module Fetch (
 );
 
 //Branch bus
-wire br_taken;
-wire [31:0] br_target;
-assign {br_taken,br_target} = Branch_BUS;
+wire br_taken_D;
+wire [31:0] br_target_D;
+assign {br_taken_D,br_target_D} = Branch_BUS_D;
+wire br_taken_E;
+wire [31:0] br_target_E;
+assign {br_taken_E,br_target_E} = Branch_BUS_E;
 
 wire        predict_taken  = predict_BUS[32];
 wire [31:0] predict_target = predict_BUS[31:0];
@@ -53,7 +57,8 @@ wire        pc_en;
 wire [31:0] pc_plus4 = pc_reg + 32'd4;
 
 assign pc_en = F_valid_next && F_allowin;
-assign pc_next = br_taken     ? br_target                          :
+assign pc_next = br_taken_E   ? br_target_E                        :
+                 br_taken_D   ? br_target_D                        : 
                  ex_en        ? ex_entryPC                         :
                  predict_taken? predict_target                     :
                  ertn_flush   ? new_pc                             : pc_plus4;
