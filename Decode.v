@@ -20,8 +20,7 @@ module Decode (
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
     input                           BTB_stall_i,
-    output                          predict_error,
-    output [`Branch_BUS_Wid-1:0]    Branch_BUS,
+    input                           predict_error,
     output                          ex_en,
     output [31:0]                   ex_entryPC,
     output                          ertn_flush,
@@ -47,12 +46,14 @@ wire        inst_bge;
 wire        inst_bltu;
 wire        inst_bgeu;
 reg         BTB_stall;
-wire        predict_taken;
+reg         BTB_stall_delay;
+wire        predict_direct_taken;
+wire        predict_indirect_taken;
 wire [31:0] predict_target;
 
 assign {pc_D,inst_D,pc_en_D,ex_pD,ecode_pD,esubcode_pD,op_31_26_d,
         inst_jirl,inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
-        predict_taken,predict_target} = pDD_BUS_D;
+        predict_direct_taken,predict_indirect_taken,predict_target} = pDD_BUS_D;
 
 //pipeline handshake
 reg  D_valid;
@@ -75,15 +76,23 @@ always @(posedge clk) begin
     end
     
     if (D_allowin) begin
-        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) && !ertn_flush && !predict_error && !BTB_stall;
+        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) &&
+                   !predict_error && !BTB_stall && !BTB_stall_delay && !ertn_flush;
     end
 end
 
 always @(posedge clk) begin
     if (!rstn) begin
         BTB_stall <= 1'b0;
-    end else begin
+        BTB_stall_delay <= 1'b0;
+    end 
+    else if (predict_error) begin
+        BTB_stall <= 1'b0;
+        BTB_stall_delay <= 1'b0;
+    end
+    else begin
         BTB_stall <= BTB_stall_i;
+        BTB_stall_delay <= BTB_stall;
     end
 end
 
@@ -170,9 +179,9 @@ wire [`alu_op_Wid-1:0] alu_op;
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_b | inst_ld_bu | inst_ld_h | inst_ld_hu | inst_ld_w | 
                     inst_st_b | inst_st_h | inst_st_w | 
                     inst_jirl | inst_bl | inst_pcaddu12i | inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w;
-assign alu_op[ 1] = inst_sub_w;
-assign alu_op[ 2] = inst_slt | inst_slti;
-assign alu_op[ 3] = inst_sltu | inst_sltui;
+assign alu_op[ 1] = inst_sub_w | inst_beq | inst_bne;
+assign alu_op[ 2] = inst_slt | inst_slti | inst_blt | inst_bge;
+assign alu_op[ 3] = inst_sltu | inst_sltui | inst_bltu | inst_bgeu;
 assign alu_op[ 4] = inst_and | inst_andi;
 assign alu_op[ 5] = inst_nor;
 assign alu_op[ 6] = inst_or | inst_ori;
@@ -200,13 +209,16 @@ wire need_si26  =  inst_b | inst_bl;
 wire src2_is_4  =  inst_jirl | inst_bl;
 
 
-wire [31:0] imm;
-assign imm = src2_is_4 ? 32'h4                      :
-             need_si20 ? {i20[19:0], 12'b0}         :
-             need_si12u? {20'b0, i12[11:0]}         :
-             need_si16 ? {{14{i16[15]}}, i16, 2'b0} :
-/*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
- 
+reg  [31:0] imm;
+always @(*) begin
+    case (1'b1)
+        src2_is_4 : imm = 32'h4;
+        need_si20 : imm = {i20[19:0], 12'b0};
+        need_si12u: imm = {20'b0, i12[11:0]};
+        need_si16 : imm = {{14{i16[15]}}, i16, 2'b0};
+        default   : imm = {{20{i12[11]}}, i12[11:0]}; //need_ui5 || need_si12
+    endcase
+end
 
 wire   src_reg_is_rd = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | 
                        inst_bgeu | inst_st_w | inst_st_b | inst_st_h| 
@@ -251,6 +263,8 @@ wire [4:0] dest          = dst_is_r1    ? 5'd1 :
 //regfile data manage
 wire [ 4:0] rf_raddr1 = rj;
 wire [ 4:0] rf_raddr2 = src_reg_is_rd ? rd :rk;
+wire        rf_raddr1_neq0 = rf_raddr1 != 5'b0;
+wire        rf_raddr2_neq0 = rf_raddr2 != 5'b0;
 wire [31:0] rf_rdata1;
 wire [31:0] rf_rdata2;
 wire        rf_we;
@@ -289,19 +303,35 @@ assign {res_from_mem_E,dest_E,rf_wdata_E,csr_we_E,csr_addr_E,csr_wmask_E,csr_wda
 assign {dest_M,rf_wdata_M,csr_we_M,csr_addr_M,csr_wmask_M,csr_wdata_M} = MD_for_BUS;
 
 assign load_stall = |res_from_mem_E && !ex_en &&
-                    ((rf_raddr1 == dest_E) && (|rf_raddr1) || (rf_raddr2 == dest_E) && (|rf_raddr2)) && 
+                    ((rf_raddr1 == dest_E) && (rf_raddr1_neq0) || (rf_raddr2 == dest_E) && (rf_raddr2_neq0)) &&
                     ((rf_raddr1 != dest_M) || (rf_raddr2 != dest_M));
 
-wire [31:0] rj_value;
-wire [31:0] rkd_value;
-assign rj_value  =  |rj               ? 
-                    ((rj == dest_E)   ? rf_wdata_E :
-                     (rj == dest_M)   ? rf_wdata_M : 
-                     (rj == rf_waddr) && rf_we ? rf_wdata : rf_rdata1) : rf_rdata1;
-assign rkd_value =  |rf_raddr2               ? 
-                    ((rf_raddr2 == dest_E)   ? rf_wdata_E :
-                     (rf_raddr2 == dest_M)   ? rf_wdata_M : 
-                     (rf_raddr2 == rf_waddr) && rf_we ? rf_wdata : rf_rdata2) : rf_rdata2;
+wire        rf_raddr1_eq_dest_E = (rf_raddr1 == dest_E) && (rf_raddr1_neq0);
+wire        rf_raddr2_eq_dest_E = (rf_raddr2 == dest_E) && (rf_raddr2_neq0);
+wire        rf_raddr1_eq_dest_M = (rf_raddr1 == dest_M) && (rf_raddr1_neq0);
+wire        rf_raddr2_eq_dest_M = (rf_raddr2 == dest_M) && (rf_raddr2_neq0);
+wire        rf_raddr1_eq_rf_waddr = (rf_raddr1 == rf_waddr) && (rf_raddr1_neq0) && rf_we;
+wire        rf_raddr2_eq_rf_waddr = (rf_raddr2 == rf_waddr) && (rf_raddr2_neq0) && rf_we;
+reg  [31:0] rj_value;
+reg  [31:0] rkd_value;
+
+always @(*) begin
+    case (1'b1)
+        rf_raddr1_eq_dest_E  : rj_value = rf_wdata_E;
+        rf_raddr1_eq_dest_M  : rj_value = rf_wdata_M;
+        rf_raddr1_eq_rf_waddr: rj_value = rf_wdata;
+        default              : rj_value = rf_rdata1;
+    endcase
+end
+
+always @(*) begin
+    case (1'b1)
+        rf_raddr2_eq_dest_E  : rkd_value = rf_wdata_E;
+        rf_raddr2_eq_dest_M  : rkd_value = rf_wdata_M;
+        rf_raddr2_eq_rf_waddr: rkd_value = rf_wdata;
+        default              : rkd_value = rf_rdata2;
+    endcase
+end
 
 //CSR data manage
 wire [13:0] csr_addr     = inst_ertn ? 14'h06 :
@@ -380,66 +410,50 @@ wire        rj_ltu_rd;
 wire [31:0] out;
 wire        overflow;
 wire        sign_bit;
-wire [31:0] br_target;
 wire [31:0] br_offs;
 wire [31:0] jirl_offs;
-wire        br_taken;
-
-
-assign {sign_bit, out} = {1'b0, rj_value} + {1'b1, ~rkd_value} + 33'd1;
-assign rj_eq_rd = (rj_value == rkd_value);
-assign overflow = (rj_value[31] ^ rkd_value[31]) & (rj_value[31] ^ out[31]);
-assign rj_lt_rd = out[31] ^ overflow;
-assign rj_ltu_rd= sign_bit;
-assign br_taken = (   inst_beq  &&  rj_eq_rd
-                   || inst_bne  && !rj_eq_rd
-                   || inst_jirl
-                   || inst_bl
-                   || inst_b
-                   || inst_blt  &&  rj_lt_rd
-                   || inst_bge  && !rj_lt_rd
-                   || inst_bltu &&  rj_ltu_rd
-                   || inst_bgeu && !rj_ltu_rd
-                   ) && D_valid && !ex_en;
-
+wire [31:0] offs;
+wire        predict_taken = predict_direct_taken | predict_indirect_taken;
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ; 
 assign jirl_offs = {{14{i16[15]}}, i16[15:0], 2'b0};
+assign offs      = (inst_bl || inst_b || inst_beq || inst_bne ||
+                    inst_blt || inst_bge || inst_bltu || inst_bgeu) ? br_offs   :
+                    inst_jirl                                       ? jirl_offs :
+                                                                      32'b0;
 
-assign br_target = predict_taken & !br_taken ? pc_D + 32'd4 :
-                   (inst_beq || inst_bne || inst_bl   || inst_b    ||
-                    inst_blt || inst_bge || inst_bltu || inst_bgeu) ? (pc_D + br_offs) :
-                                                   /*inst_jirl*/ (rj_value + jirl_offs);
-
-wire   direct_jump   = inst_jirl | inst_bl | inst_b;
-wire   indirect_jump = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
-
-assign predict_error = (direct_jump | indirect_jump) & !BTB_stall & D_valid & !ex_en &
-                       (br_taken & predict_taken & (br_target != predict_target) | (br_taken ^ predict_taken));
-
-wire   br_taken_final = predict_error | (D_valid & BTB_stall);   
-
-assign Branch_BUS = {br_taken_final,  //32
-                     br_target};      //31:0
 //alu data input manage
-wire  [31:0] alu_src1;
-wire  [31:0] alu_src2;
-assign alu_src1 = src1_is_pc     ? pc_D[31:0]     :
-                  inst_rdcntid   ? csr_value      :
-                  inst_rdcntvl_w ? counter[31:0]  : 
-                  inst_rdcntvh_w ? counter[63:32] : rj_value;
-assign alu_src2 = src2_is_imm                                    ? imm   :
-                  inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w ? 32'b0 : rkd_value;
+reg  [31:0] alu_src1;
+reg  [31:0] alu_src2;
+always @(*) begin
+    case (1'b1)
+        src1_is_pc     : alu_src1 = pc_D[31:0];
+        inst_rdcntid   : alu_src1 = csr_value;
+        inst_rdcntvl_w : alu_src1 = counter[31:0];
+        inst_rdcntvh_w : alu_src1 = counter[63:32];
+        default        : alu_src1 = rj_value;
+    endcase
+end
+always @(*) begin
+    case (1'b1)
+        src2_is_imm    : alu_src2 = imm;
+        inst_rdcntid   : alu_src2 = 32'b0;
+        inst_rdcntvl_w : alu_src2 = 32'b0;
+        inst_rdcntvh_w : alu_src2 = 32'b0;
+        default        : alu_src2 = rkd_value;
+    endcase
+end
+wire [31:0] rf_data = inst_jirl ? rj_value : rkd_value;
 
 //exception manage
-wire       unknownInst = ~inst_add_w && ~inst_sub_w && ~inst_slt && ~inst_sltu && ~inst_nor && ~inst_and && ~inst_or && ~inst_xor && 
-                         ~inst_sll_w && ~inst_srl_w && ~inst_sra_w && ~inst_mul_w && ~inst_mulh_w && ~inst_mulh_wu && ~inst_div_w && 
-                         ~inst_mod_w && ~inst_div_wu && ~inst_mod_wu && ~inst_slli_w && ~inst_srli_w && ~inst_srai_w && ~inst_slti && 
-                         ~inst_sltui && ~inst_addi_w && ~inst_andi && ~inst_ori && ~inst_xori && ~inst_pcaddu12i && ~inst_jirl && 
-                         ~inst_b && ~inst_bl && ~inst_beq && ~inst_bne && ~inst_blt && ~inst_bge && ~inst_bltu && ~inst_bgeu && 
-                         ~inst_ld_b && ~inst_ld_h && ~inst_ld_bu && ~inst_ld_hu && ~inst_ld_w && ~inst_st_b && ~inst_st_h && ~inst_st_w && 
-                         ~inst_lu12i_w && ~inst_csrrd && ~inst_csrwr && ~inst_csrxchg && ~inst_ertn && ~inst_break && ~inst_syscall &&
-                         ~inst_rdcntid && ~inst_rdcntvl_w && ~inst_rdcntvh_w;
+wire       unknownInst = !{|{inst_add_w,inst_sub_w,inst_slt,inst_sltu,inst_nor,inst_and,inst_or,inst_xor,
+                             inst_sll_w,inst_srl_w,inst_sra_w,inst_mul_w,inst_mulh_w,inst_mulh_wu,inst_div_w,
+                             inst_mod_w,inst_div_wu,inst_mod_wu,inst_slli_w,inst_srli_w,inst_srai_w,inst_slti,
+                             inst_sltui,inst_addi_w,inst_andi,inst_ori,inst_xori,inst_pcaddu12i,inst_jirl,
+                             inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
+                             inst_ld_b,inst_ld_h,inst_ld_bu,inst_ld_hu,inst_ld_w,inst_st_b,inst_st_h,inst_st_w,
+                             inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,
+                             inst_rdcntid,inst_rdcntvl_w,inst_rdcntvh_w}};
 assign     ex_D    = D_ready_go && (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      ex_pD        ? ecode_pD    :
@@ -462,16 +476,17 @@ always @(posedge clk) begin
 end
 
 //output manage
-assign DE_BUS = {inst_D,        //349:318
-                 direct_jump,   //317
-                 indirect_jump, //316
-                 br_taken,      //315
-                 br_target,     //314:283
+assign DE_BUS = {inst_D,        //388:357
+                 inst_b,inst_bl,inst_jirl,   //356:354
+                 predict_taken,//353
+                 predict_target,//352:321
+                 inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu, //320:315
+                 offs,         //314:283
                  pc_D,          //282:251
                  alu_op,        //250:232
                  alu_src1,      //231:200
                  alu_src2,      //199:168
-                 rkd_value,     //167:136
+                 rf_data,       //167:136
                  gr_we,         //135
                  mem_we,        //134:131
                  dest,          //130:126

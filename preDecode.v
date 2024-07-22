@@ -114,7 +114,7 @@ generate
     end
 endgenerate
 
-assign BTB_stall = pD_valid & !predict_error & (!(|BTB_hit) & (inst_jirl | inst_b | inst_bl));
+assign BTB_stall = pD_valid & !predict_error & !ex_en & (!(|BTB_hit) & (inst_jirl | inst_b | inst_bl));
 
 generate
     for (i = 0;i < 32;i = i + 1) begin
@@ -167,10 +167,13 @@ assign TC_target = TC_PC[PHT_index];
 // Branch Prediction
 wire [31:0] predict_target;
 wire        predict_taken;
+wire        predict_direct_taken;
+wire        predict_indirect_taken;
 
-assign predict_taken = pD_valid & (!BTB_stall & (inst_jirl | inst_b | inst_bl) |
-                                    PHT[PHT_index][1] & (inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu));
-assign predict_target = predict_taken ? (|BTB_hit ? BTB_target : TC_target) : 32'b0;
+assign predict_direct_taken = pD_valid & !BTB_stall & (inst_jirl | inst_b | inst_bl);
+assign predict_indirect_taken = pD_valid & PHT[PHT_index][1] & (inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu);
+assign predict_taken = predict_direct_taken | predict_indirect_taken;
+assign predict_target = predict_direct_taken ? (|BTB_hit ? BTB_target : TC_target) : 32'b0;
 
 assign predict_BUS = {predict_taken,predict_target};
 
@@ -187,23 +190,24 @@ always @(posedge clk) begin
     end
 end
 // pDD BUS
-assign pDD_BUS = {pc_pD,            //180:149
-                  inst_pD,          //148:117
-                  pc_en_pD,         //116
-                  ex_pD,            //115
-                  ecode_pD,         //114:107
-                  esubcode_pD,      //106
-                  op_31_26_d,       //105:42
-                  inst_jirl,        //41
-                  inst_b,           //40
-                  inst_bl,          //39
-                  inst_beq,         //38
-                  inst_bne,         //37
-                  inst_blt,         //36
-                  inst_bge,         //35
-                  inst_bltu,        //34    
-                  inst_bgeu,        //33
-                  predict_taken,    //32
+assign pDD_BUS = {pc_pD,            //181:150
+                  inst_pD,          //149:118
+                  pc_en_pD,         //117
+                  ex_pD,            //116
+                  ecode_pD,         //115:108
+                  esubcode_pD,      //107
+                  op_31_26_d,       //106:43
+                  inst_jirl,        //42
+                  inst_b,           //41
+                  inst_bl,          //40
+                  inst_beq,         //39
+                  inst_bne,         //38
+                  inst_blt,         //37
+                  inst_bge,         //36
+                  inst_bltu,        //35    
+                  inst_bgeu,        //34
+                  predict_direct_taken,//33
+                  predict_indirect_taken,//32
                   predict_target};  //31:0
 endmodule
 
