@@ -1,4 +1,4 @@
-`define FpD_BUS_Wid     32+1+1+8+1
+`define FpD_BUS_Wid     32+32+1+1+8+1
 `define pDD_BUS_Wid     32+32+1+1+8+1+64+9+1+1+32
 `define DE_BUS_Wid      32+1+32+1+32+6+32+32+`alu_op_Wid+32+32+32+1+4+5+4+1+8+1+14+1+32+32+32+1
 `define EM_BUS_Wid      `WpD_BUS_Wid+32+32+1+5+4+32+1+8+1+14+1+32+32

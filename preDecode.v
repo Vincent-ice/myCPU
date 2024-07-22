@@ -16,8 +16,6 @@ module preDecode (
     output [`predict_BUS_Wid-1:0]predict_BUS,
     input  [`PB_BUS_Wid-1:0]    PB_BUS,
 
-    input  [31:0]               inst_sram_rdata,
-
     output                      BTB_stall,
     input                       predict_error_D,
     input                       predict_error_E,
@@ -29,11 +27,12 @@ module preDecode (
 reg  [`FpD_BUS_Wid-1:0] FpD_BUS_pD;
 wire        pc_en_pD;
 wire [31:0] pc_pD;
+wire [31:0] inst_pD;
 wire        ex_pD;
 wire [ 7:0] ecode_pD;
 wire        esubcode_pD;
 
-assign {pc_pD,pc_en_pD,ex_pD,ecode_pD,esubcode_pD} = FpD_BUS_pD;
+assign {pc_pD,inst_pD,pc_en_pD,ex_pD,ecode_pD,esubcode_pD} = FpD_BUS_pD;
 
 //predict BUS
 wire [31:0] inst_W;
@@ -64,7 +63,7 @@ always @(posedge clk) begin
     end
 end
 
-wire [31:0] inst_pD = inst_sram_rdata;
+
 wire [ 5:0] op_31_26 = inst_pD[31:26];
 wire [63:0] op_31_26_d;
 decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
