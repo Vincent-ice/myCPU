@@ -20,6 +20,8 @@ module preDecode (
     input                       predict_error_D,
     input                       predict_error_E,
     input                       ertn_flush,
+    input                       ex_D,
+    input                       ex_E,
     input                       ex_en
 );
 
@@ -28,11 +30,11 @@ reg  [`FpD_BUS_Wid-1:0] FpD_BUS_pD;
 wire        pc_en_pD;
 wire [31:0] pc_pD;
 wire [31:0] inst_pD;
-wire        ex_pD;
+wire        ex_F;
 wire [ 7:0] ecode_pD;
 wire        esubcode_pD;
 
-assign {pc_pD,inst_pD,pc_en_pD,ex_pD,ecode_pD,esubcode_pD} = FpD_BUS_pD;
+assign {pc_pD,inst_pD,pc_en_pD,ex_F,ecode_pD,esubcode_pD} = FpD_BUS_pD;
 
 //predict BUS
 wire [31:0] inst_W;
@@ -45,22 +47,30 @@ assign {inst_W,direct_jump_W,indirect_jump_W,br_taken_W,br_target_W,pc_W} = PB_B
 
 //pipeline handshake
 reg  pD_valid;
+wire ex_pD;
 reg  ex_flag;
 wire pD_ready_go    = pD_valid;
 assign pD_allowin   = !pD_valid || pD_ready_go && D_allowin;
 assign pDD_valid    = pD_valid && pD_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
-        pD_valid <= 1'b0;
         FpD_BUS_pD <= 'b0;
     end
-    else if (pD_allowin) begin
-        pD_valid <= FpD_valid && !BTB_stall && (!ex_flag && !ex_pD || ex_en);
-    end
-
-    if (FpD_valid && pD_allowin) begin
+/*     else if (ex_en) begin
+        FpD_BUS_pD <= 'b0;
+    end */
+    else if (FpD_valid && pD_allowin) begin
         FpD_BUS_pD <= FpD_BUS;
     end
+    
+    if (!rstn) begin
+        pD_valid <= 1'b0;
+    end
+    else if (pD_allowin) begin
+        pD_valid <= FpD_valid && !BTB_stall && (!ex_flag && !ex_pD/*  || ex_en */);
+    end
+
+    
 end
 
 
@@ -178,15 +188,16 @@ assign predict_target = predict_direct_taken ? (|BTB_hit ? BTB_target : TC_targe
 assign predict_BUS = {predict_taken,predict_target};
 
 // exception flag
+assign ex_pD = pD_valid & ex_F;
 always @(posedge clk) begin
     if (!rstn) begin
         ex_flag <= 1'b0;
     end 
-    else if (ex_pD) begin
-        ex_flag <= 1'b1;
-    end
     else if (ex_en) begin
         ex_flag <= 1'b0;
+    end
+    else if (ex_pD) begin
+        ex_flag <= 1'b1;
     end
 end
 // pDD BUS

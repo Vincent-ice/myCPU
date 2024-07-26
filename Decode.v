@@ -23,6 +23,7 @@ module Decode (
     output                          predict_error_D,
     input                           predict_error_E,
     output [`Branch_BUS_Wid-1:0]    Branch_BUS_D,
+    output                          ex_D,
     output                          ex_en,
     output [31:0]                   ex_entryPC,
     output                          ertn_flush,
@@ -59,7 +60,6 @@ assign {pc_D,inst_D,pc_en_D,ex_pD,ecode_pD,esubcode_pD,op_31_26_d,
 //pipeline handshake
 reg  D_valid;
 reg  ex_flag;
-wire ex_D;
 wire load_stall;
 wire D_ready_go    = D_valid & ~load_stall;
 assign D_allowin   = !D_valid || D_ready_go && E_allowin;
@@ -76,15 +76,19 @@ always @(posedge clk) begin
         pDD_BUS_D <= pDD_BUS;
     end
     
-    if (D_allowin) begin
-        D_valid <= pDD_valid && (!ex_flag && !ex_D && !ex_en) && !ertn_flush && !predict_error_D && !predict_error_E && !BTB_stall;
+    if (ex_en) begin
+        D_valid <= 1'b0;
+    end
+    else if (D_allowin) begin
+        D_valid <= pDD_valid && (!ex_flag && !ex_D) && !predict_error_D && !predict_error_E && !BTB_stall;
     end
 end
 
 always @(posedge clk) begin
     if (!rstn) begin
         BTB_stall <= 1'b0;
-    end else begin
+    end 
+    else if (D_allowin) begin
         BTB_stall <= BTB_stall_i;
     end
 end
@@ -245,7 +249,7 @@ wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
                            inst_ld_hu ? 4'b0111 : 4'b0000;
 wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
-wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & pc_en_D & 
+wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & D_valid & 
                            ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu  ;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
@@ -299,8 +303,8 @@ assign load_stall = |res_from_mem_E && !ex_en &&
                     ((rf_raddr1 == dest_E) && (rf_raddr1_neq0) || (rf_raddr2 == dest_E) && (rf_raddr2_neq0)) &&
                     ((rf_raddr1 != dest_M) || (rf_raddr2 != dest_M));
 
-wire        rf_raddr1_eq_dest_E = (rf_raddr1 == dest_E) && (rf_raddr1_neq0);
-wire        rf_raddr2_eq_dest_E = (rf_raddr2 == dest_E) && (rf_raddr2_neq0);
+wire        rf_raddr1_eq_dest_E = (rf_raddr1 == dest_E) && (rf_raddr1_neq0) && !res_from_mem_E;
+wire        rf_raddr2_eq_dest_E = (rf_raddr2 == dest_E) && (rf_raddr2_neq0) && !res_from_mem_E;
 wire        rf_raddr1_eq_dest_M = (rf_raddr1 == dest_M) && (rf_raddr1_neq0);
 wire        rf_raddr2_eq_dest_M = (rf_raddr2 == dest_M) && (rf_raddr2_neq0);
 wire        rf_raddr1_eq_rf_waddr = (rf_raddr1 == rf_waddr) && (rf_raddr1_neq0) && rf_we;

@@ -56,7 +56,10 @@ always @(posedge clk) begin
         MW_BUS_W <= MW_BUS;
     end
     
-    if (W_allowin) begin
+    if (ex_en) begin
+        W_valid <= 1'b0;
+    end
+    else if (W_allowin) begin
         W_valid <= MW_valid;
     end
 end

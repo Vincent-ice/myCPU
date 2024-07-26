@@ -53,6 +53,8 @@ wire                            E_allowin;
 wire                            M_allowin;
 wire                            W_allowin;
 
+wire                            ex_D;
+wire                            ex_E;
 wire                            ex_en;
 wire [31:0]                     ex_entryPC;
 wire                            ertn_flush;
@@ -69,10 +71,13 @@ Fetch u_Fetch(
     .predict_BUS     (predict_BUS     ),
     .Branch_BUS_D    (Branch_BUS_D    ),
     .Branch_BUS_E    (Branch_BUS_E    ),
-    .ex_en           (ex_en           ),
+    .ex_D            (ex_D            ),
+    .ex_E            (ex_E            ),
+    .ex_en_i         (ex_en           ),
     .ex_entryPC      (ex_entryPC      ),
-    .ertn_flush      (ertn_flush      ),
+    .ertn_flush_i    (ertn_flush      ),
     .new_pc          (new_pc          ),
+    .BTB_stall       (BTB_stall       ),
     .pD_allowin      (pD_allowin      ),
     .FpD_valid       (FpD_valid       ),
     .FpD_BUS         (FpD_BUS         ),
@@ -123,6 +128,7 @@ Decode u_Decode(
     .predict_error_D    (predict_error_D    ),
     .predict_error_E    (predict_error_E    ),
     .Branch_BUS_D       (Branch_BUS_D       ),
+    .ex_D               (ex_D               ),
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
     .ertn_flush         (ertn_flush         ),
@@ -139,13 +145,18 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
+    .ex_E            (ex_E            ),
     .ex_en           (ex_en           ),
     .predict_error_E (predict_error_E ),
     .Branch_BUS_E    (Branch_BUS_E    ),
-    .data_sram_en    (data_sram_req   ),
-    .data_sram_we    (data_sram_we    ),
-    .data_sram_addr  (data_sram_addr  ),
-    .data_sram_wdata (data_sram_wdata )
+    .data_sram_req    (data_sram_req    ),
+    .data_sram_wr     (data_sram_wr     ),
+    .data_sram_size   (data_sram_size   ),
+    .data_sram_wstrb  (data_sram_wstrb  ),
+    .data_sram_addr   (data_sram_addr   ),
+    .data_sram_wdata  (data_sram_wdata  ),
+    .data_sram_addr_ok(data_sram_addr_ok),
+    .data_sram_data_ok(data_sram_data_ok)
 );
 
 Memory u_Memory(
@@ -156,6 +167,7 @@ Memory u_Memory(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .MD_for_BUS      (MD_for_BUS      ),
+    .data_sram_data_ok(data_sram_data_ok),
     .data_sram_rdata (data_sram_rdata ),
     .ex_en           (ex_en           ),
     .MW_valid        (MW_valid        ),

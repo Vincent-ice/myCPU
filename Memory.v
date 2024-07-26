@@ -11,6 +11,7 @@ module Memory (
 
     output [`MD_for_BUS_Wid-1:0] MD_for_BUS,
 
+    input                       data_sram_data_ok,
     input  [31:0]               data_sram_rdata,
 
     input                       ex_en,
@@ -41,9 +42,9 @@ assign {PB_BUS_M,pc_M,rf_wdata_M,gr_we_M,dest_M,res_from_mem_M,vaddr_M,
 
 //pipeline handshake
 reg    M_valid;
-wire   M_ready_go    = 1'b1;
+wire   M_ready_go    = (!ex_M & |res_from_mem_M )? data_sram_data_ok : 1'b1;
 assign M_allowin     = !M_valid || M_ready_go && W_allowin;
-assign MW_valid      = M_valid && M_ready_go;
+assign MW_valid      = M_valid && M_ready_go || data_sram_data_ok;
 assign ex_M = M_valid && ex_E;
 always @(posedge clk) begin
     if (!rstn) begin
@@ -57,7 +58,10 @@ always @(posedge clk) begin
         EM_BUS_M <= EM_BUS;
     end
     
-    if (M_allowin) begin
+    if (ex_en) begin
+        M_valid <= 1'b0;
+    end
+    else if (M_allowin) begin
         M_valid <= EM_valid && (!ex_M && !ex_en);
     end
 end
