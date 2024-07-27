@@ -1,17 +1,18 @@
 `include "Defines.vh"
 module mycpu_top(
+    input  wire [7:0]  ext_int ,
     input  wire        aclk    ,
     input  wire        aresetn ,
 
-    input  wire [3 :0] arid   ,
-    input  wire [31:0] araddr ,
-    input  wire [7 :0] arlen  ,
-    input  wire [2 :0] arsize ,
-    input  wire [1 :0] arburst,
-    input  wire [1 :0] arlock ,
-    input  wire [3 :0] arcache,
-    input  wire [2 :0] arprot ,
-    input  wire        arvalid,
+    output wire [3 :0] arid   ,
+    output wire [31:0] araddr ,
+    output wire [7 :0] arlen  ,
+    output wire [2 :0] arsize ,
+    output wire [1 :0] arburst,
+    output wire [1 :0] arlock ,
+    output wire [3 :0] arcache,
+    output wire [2 :0] arprot ,
+    output wire        arvalid,
     input  wire        arready,
 
     input  wire [3 :0] rid    ,
@@ -19,29 +20,30 @@ module mycpu_top(
     input  wire [1 :0] rresp  ,
     input  wire        rlast  ,
     input  wire        rvalid ,
-    input  wire        rready ,
+    output wire        rready ,
 
-    input  wire [3 :0] awid   ,
-    input  wire [31:0] awaddr ,
-    input  wire [7 :0] awlen  ,
-    input  wire [2 :0] awsize ,
-    input  wire [1 :0] awburst,
-    input  wire [1 :0] awlock ,
-    input  wire [3 :0] awcache,
-    input  wire [2 :0] awprot ,
-    input  wire        awvalid,
+    output wire [3 :0] awid   ,
+    output wire [31:0] awaddr ,
+    output wire [7 :0] awlen  ,
+    output wire [2 :0] awsize ,
+    output wire [1 :0] awburst,
+    output wire [1 :0] awlock ,
+    output wire [3 :0] awcache,
+    output wire [2 :0] awprot ,
+    output wire        awvalid,
     input  wire        awready,
 
-    input  wire [3 :0] wid    ,
-    input  wire [31:0] wdata  ,
-    input  wire [3 :0] wstrb  ,
-    input  wire        wlast  ,
-    input  wire        wvalid ,
+    output wire [3 :0] wid    ,
+    output wire [31:0] wdata  ,
+    output wire [3 :0] wstrb  ,
+    output wire        wlast  ,
+    output wire        wvalid ,
     input  wire        wready ,
+
     input  wire [3 :0] bid    ,
     input  wire [1 :0] bresp  ,
     input  wire        bvalid ,
-    input  wire        bready ,
+    output wire        bready ,
     // trace debug interface
     output wire [31:0] debug_wb_pc,
     output wire [ 3:0] debug_wb_rf_we,
@@ -83,7 +85,7 @@ wire [31:0]                     new_pc;
 wire                            BTB_stall;
 wire                            predict_error_D;
 wire                            predict_error_E;
-wire [ 7:0]                     hardware_interrupt = 8'b0;
+wire [ 7:0]                     hardware_interrupt = ext_int;
 
 wire                            inst_sram_req;
 wire [ 3:0]                     inst_sram_wstrb;
@@ -211,6 +213,8 @@ preDecode u_preDecode(
     .predict_error_D (predict_error_D ),
     .predict_error_E (predict_error_E ),
     .ertn_flush      (ertn_flush      ),
+    .ex_D            (ex_D            ),
+    .ex_E            (ex_E            ),
     .ex_en           (ex_en           )
 );
 

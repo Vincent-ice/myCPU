@@ -152,7 +152,7 @@ divCore_srt2 u_divCore_srt2(
   .ready   (div_ready    ),
   .complete(div_complete )
 );
-assign div_stall = ~div_ready;
+wire div_stall = ~div_ready;
 always @(posedge clk ) begin
     div_ready_delay <= div_ready;
 end
