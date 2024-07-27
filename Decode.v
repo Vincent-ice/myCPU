@@ -61,7 +61,8 @@ assign {pc_D,inst_D,pc_en_D,ex_pD,ecode_pD,esubcode_pD,op_31_26_d,
 reg  D_valid;
 reg  ex_flag;
 wire load_stall;
-wire D_ready_go    = D_valid & ~load_stall;
+wire forward_stall;
+wire D_ready_go    = D_valid & !load_stall & !forward_stall;
 assign D_allowin   = !D_valid || D_ready_go && E_allowin;
 assign DE_valid    = D_valid && D_ready_go;
 always @(posedge clk) begin
@@ -314,7 +315,7 @@ reg  [31:0] rkd_value;
 
 always @(*) begin
     case (1'b1)
-        rf_raddr1_eq_dest_E  : rj_value = rf_wdata_E;
+/*         rf_raddr1_eq_dest_E  : rj_value = rf_wdata_E; */
         rf_raddr1_eq_dest_M  : rj_value = rf_wdata_M;
         rf_raddr1_eq_rf_waddr: rj_value = rf_wdata;
         default              : rj_value = rf_rdata1;
@@ -323,12 +324,14 @@ end
 
 always @(*) begin
     case (1'b1)
-        rf_raddr2_eq_dest_E  : rkd_value = rf_wdata_E;
+/*         rf_raddr2_eq_dest_E  : rkd_value = rf_wdata_E; */
         rf_raddr2_eq_dest_M  : rkd_value = rf_wdata_M;
         rf_raddr2_eq_rf_waddr: rkd_value = rf_wdata;
         default              : rkd_value = rf_rdata2;
     endcase
 end
+
+assign forward_stall = rf_raddr1_eq_dest_E | rf_raddr2_eq_dest_E;
 
 //CSR data manage
 wire [13:0] csr_addr     = inst_ertn ? 14'h06 :
