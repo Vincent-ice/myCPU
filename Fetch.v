@@ -192,21 +192,28 @@ assign      ex_F       = |pc_reg[1:0] && F_valid;
 wire [ 7:0] ecode_F    = ex_F ? `ECODE_ADEF : 8'h00;
 wire        esubcode_F = `ESUBCODE_ADEF;
 
-//FD BUS
-assign FpD_BUS = {pc_reg,       //74:43
-                 inst_sram_rdata,//42:11
-                 pc_en,         //10
-                 ex_F,          //9
-                 ecode_F,       //8:1
-                 esubcode_F};   //0
-
 //inst sram manage
+reg  [31:0] inst_sram_rdata_buff;
 assign inst_sram_req   = pc_en;
 assign inst_sram_wr    = 1'b0;
 assign inst_sram_size  = 2'b10;
 assign inst_sram_wstrb = 4'b0;
 assign inst_sram_addr  = pc_next; //virtual
 assign inst_sram_wdata = 32'b0 ;
+always @(posedge clk) begin
+    if (!rstn) begin
+        inst_sram_rdata_buff <= 32'b0;
+    end
+    else if (inst_sram_data_ok) begin
+        inst_sram_rdata_buff <= inst_sram_rdata;
+    end
+end
 
-    
+//FD BUS
+assign FpD_BUS = {pc_reg,       //74:43
+                 inst_sram_rdata_buff,//42:11
+                 pc_en,         //10
+                 ex_F,          //9
+                 ecode_F,       //8:1
+                 esubcode_F};   //0
 endmodule
