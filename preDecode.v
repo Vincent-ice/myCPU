@@ -133,11 +133,15 @@ generate
 endgenerate
 
 // Adaptive Two-level Predictror
-reg  [`BHR_Wid-1:0] BHT [2**12-1:0];         // use inst[11:0] as index
+reg  [`BHR_Wid-1:0] BHT [2**`BHT_INDEX_Wid-1:0];         // use PC's 5-bit hash as index
 reg  [1:0]          PHT [2**`BHR_Wid-1:0];
+wire [`BHT_INDEX_Wid-1:0] BHT_index;
 wire [`BHR_Wid-1:0] PHT_index;
+hash_function #(`BHT_INDEX_Wid) u_hash_function(.data_in(pc_pD),.hash_out(BHT_index));
 
-wire [`BHR_Wid-1:0] PHT_index_W = BHT[inst_W[11:0]] ^ pc_W[11:0];
+wire [`BHT_INDEX_Wid-1:0] BHT_index_W;
+hash_function #(`BHT_INDEX_Wid) u_hash_function_W(.data_in(pc_W),.hash_out(BHT_index_W));
+wire [`BHR_Wid-1:0] PHT_index_W = BHT[BHT_index_W] ^ pc_W[`BHT_INDEX_Wid-1:0];
 wire [1:0]          PHT_wdata;
 bimodal_predictor u_bimodal_predictor(.data_i(PHT[PHT_index_W]),.taken(br_taken_W),.data_o(PHT_wdata));
 always @(posedge clk) begin
@@ -150,12 +154,12 @@ always @(posedge clk) begin
         end    
     end
     else if (indirect_jump_W) begin
-        BHT[inst_W[11:0]] <= {BHT[inst_W[11:0]][`BHR_Wid-2:0],br_taken_W};
+        BHT[BHT_index_W] <= {BHT[BHT_index_W][`BHR_Wid-2:0],br_taken_W};
         PHT[PHT_index_W] <= PHT_wdata;
     end
 end
 
-assign PHT_index = BHT[inst_pD[11:0]] ^ pc_pD[11:0];   // use xor to avoid aliasing
+assign PHT_index = BHT[BHT_index] ^ pc_pD[`BHT_INDEX_Wid-1:0];   // use xor to avoid aliasing
 
 // Target Cache
 reg  [31:0] TC_PC [`TC_NUM-1:0];
@@ -238,4 +242,19 @@ always @(*) begin
     endcase
 end
   
+endmodule
+
+module hash_function #(
+    parameter hash = 5
+) (    
+    input [31:0] data_in,
+    output [hash-1:0] hash_out
+);
+
+wire [31:0] data_right_shift_16 = data_in >> 16;
+wire [31:0] data_right_shift_8 = data_in >> 8;
+wire [hash-1:0] final_hash = (data_in[hash-1:0] ^ data_right_shift_16[hash-1:0]) + (data_in[hash-1:0] ^ data_right_shift_8[hash-1:0]);
+
+assign hash_out = final_hash;
+
 endmodule

@@ -401,12 +401,6 @@ assign csr_value =  csr_forward_E | csr_forward_M ? (csr_wdata_forward & csr_wma
 assign new_pc = csr_value;
 
 //branch manage
-wire        rj_eq_rd;
-wire        rj_lt_rd;
-wire        rj_ltu_rd;
-wire [31:0] out;
-wire        overflow;
-wire        sign_bit;
 wire [31:0] br_target;
 wire [31:0] br_offs;
 wire [31:0] br_PC;

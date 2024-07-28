@@ -59,18 +59,20 @@ reg  [31:0] br_target_buff;
 reg  send_handshake;
 reg  F_valid;
 wire F_valid_next   = rstn & inst_sram_req & inst_sram_addr_ok;//next cycle valid
-reg  F_ready_go;//ready send to next stage
-always @(posedge clk or posedge inst_sram_data_ok) begin
+wire F_ready_go;//ready send to next stage
+reg  F_ready_go_buff;
+always @(posedge clk) begin
     if (!rstn) begin
-        F_ready_go <= 1'b0;
+        F_ready_go_buff <= 1'b0;
     end
     else if (inst_sram_data_ok & !has_ex) begin
-        F_ready_go <= 1'b1;
+        F_ready_go_buff <= 1'b1;
     end
     else if (inst_sram_addr_ok & inst_sram_req || has_ex || ertn_flush) begin
-        F_ready_go <= 1'b0;
+        F_ready_go_buff <= 1'b0;
     end
 end
+assign F_ready_go = F_ready_go_buff | (inst_sram_data_ok & !has_ex);
 wire F_allowin      = !F_valid || ex_en || F_ready_go && pD_allowin && !ex_F;//allow input data
 assign FpD_valid     = F_valid_next & F_ready_go & !br_taken_buff & !br_taken && !ertn_flush || (ex_F & !ex_en);//validity of D stage
 always @(posedge clk) begin

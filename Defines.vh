@@ -48,6 +48,6 @@
 `define ECODE_INT       8'h0
 
 `define BTB_NUM         64
-`define BHR_Wid         8
-`define BHT_NUM         2**8
+`define BHR_Wid         4
+`define BHT_INDEX_Wid   5
 `define TC_NUM          2**`BHR_Wid
