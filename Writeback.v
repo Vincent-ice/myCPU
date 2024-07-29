@@ -45,18 +45,20 @@ wire   W_ready_go = 1'b1;
 assign W_allowin  = !W_valid || W_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
-        W_valid <= 1'b0;
         MW_BUS_W <= 'b0;
     end
     else if (ex_en) begin
-        W_valid <= 1'b0;
         MW_BUS_W <= 'b0;
     end
     else if (MW_valid && W_allowin) begin
         MW_BUS_W <= MW_BUS;
     end
-    
-    if (ex_en) begin
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        W_valid <= 1'b0;
+    end
+    else if (ex_en) begin
         W_valid <= 1'b0;
     end
     else if (W_allowin) begin

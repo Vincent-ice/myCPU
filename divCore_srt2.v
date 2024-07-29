@@ -1,6 +1,6 @@
 module divCore_srt2(
 	input			  clk,
-	input			  rst,
+	input			  rstn,
     input             enable,
 	input 			  sign_en, // 1->signed divide
 	input		[31:0] op1,	   // dividend
@@ -63,8 +63,8 @@ always @(*) begin
 	endcase
 end
 
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		state_reg <= ST_IDLE;
 	end else begin
 		state_reg <= state_next;
@@ -74,10 +74,10 @@ end
 assign complete = state_reg==ST_OUT ? 1'b1 : 1'b0;
 
 always @(*) begin
-	if(!rst) begin
+	if(!rstn) begin
 		ready <= 1'b1;
 	end else begin
-		if(rst & state_next==ST_IDLE) begin
+		if(rstn & state_next==ST_IDLE) begin
 			ready <= 1'b1;
 		end else begin
 			ready <= 1'b0;
@@ -87,8 +87,8 @@ end
 
 assign subs = op2_ld - op1_s;
 assign iter = subs[5] ? 6'd0 : subs[5:0];
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		cnt <= 6'd0;
 	end else begin
 		if(state_next==ST_DIV) begin
@@ -105,8 +105,8 @@ end
 
 //------------------------ PROCESS ------------------------//
 
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		op1_i <= 34'b0;
 		op2_i <= 34'b0;
 	end else begin
@@ -121,7 +121,7 @@ end
 find_ld_r2 #(34) u_find_ld_r2_1 (.op(op1_i), .pos(op1_ld));
 find_ld_r2 #(34) u_find_ld_r2_2 (.op(op2_i), .pos(op2_ld));
 /* always @(*) begin
-	if(!rst) begin
+	if(!rstn) begin
 		op1_s <= 'd0;
 	end else begin
 		if(op1_ld[0]^op2_ld[0]) begin
@@ -151,8 +151,8 @@ generate
 endgenerate
 
 // residual remainder
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		rem_r <= 'd0;
 	end else begin
 		if(state_next==ST_SAMP) begin
@@ -178,7 +178,7 @@ end
 // on the fly conversion
 assign ops_sign = sign_en&(op1[31]^op2[31]);
 always @(posedge clk) begin
-	if(!rst) begin
+	if(!rstn) begin
 		Q_reg   <= 'b0;
 		QM_reg  <= 'b0;
 	end else begin
@@ -194,7 +194,7 @@ always @(posedge clk) begin
 end
 
 always @(*) begin
-	if(!rst) begin
+	if(!rstn) begin
 		Q_next  <= 'b0;
 		QM_next <= 'b0;
 	end else begin
@@ -218,8 +218,8 @@ always @(*) begin
 end
 
 // post proccessing
-always @(posedge clk or negedge rst) begin
-	if(~rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		rem_o	<=	32'd0;
 		quo_o   <=  32'd0;
 	end else begin

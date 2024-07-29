@@ -105,11 +105,13 @@ assign sr64_result = {{32{op_sra & alu_src1[31]}}, alu_src1[31:0]} >> alu_src2[4
 assign sr_result   = sr64_result[31:0];
  
 // MUL, MULH, MULHU result
+wire [31:0] mul_op1 = op_mul | op_mulh | op_mulhu ? alu_src1 : 32'b0;
+wire [31:0] mul_op2 = op_mul | op_mulh | op_mulhu ? alu_src2 : 32'b0;
 multCore u_multCore(
   .clk     (clk               ),
   .rstn    (rstn              ),
-  .op1     (alu_src1          ),
-  .op2     (alu_src2          ),
+  .op1     (mul_op1           ),
+  .op2     (mul_op2           ),
   .sign_en (op_mul | op_mulh  ),
   .out     (mul_result        )
 );//2-cycle multiply
@@ -142,7 +144,7 @@ wire div_complete;
 
 divCore_srt2 u_divCore_srt2(
   .clk     (clk          ),
-  .rst     (rstn         ),
+  .rstn    (rstn         ),
   .enable  (div_en       ),
   .sign_en (div_sign     ),
   .op1     (alu_src1     ),
@@ -152,9 +154,14 @@ divCore_srt2 u_divCore_srt2(
   .ready   (div_ready    ),
   .complete(div_complete )
 );
-assign div_stall = ~div_ready;
-always @(posedge clk ) begin
+wire div_stall = ~div_ready;
+always @(posedge clk) begin
+  if (!rstn) begin
+    div_ready_delay <= 1'b0;
+  end
+  else begin
     div_ready_delay <= div_ready;
+  end
 end
 
   // div result history
