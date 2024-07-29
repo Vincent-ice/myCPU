@@ -265,6 +265,7 @@ Excute u_Excute(
     .data_sram_wstrb  (data_sram_wstrb  ),
     .data_sram_addr   (data_sram_addr   ),
     .data_sram_wdata  (data_sram_wdata  ),
+    .data_sram_rdata  (data_sram_rdata  ),
     .data_sram_addr_ok(data_sram_addr_ok),
     .data_sram_data_ok(data_sram_data_ok)
 );
@@ -277,8 +278,6 @@ Memory u_Memory(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .MD_for_BUS      (MD_for_BUS      ),
-    .data_sram_data_ok(data_sram_data_ok),
-    .data_sram_rdata (data_sram_rdata ),
     .ex_en           (ex_en           ),
     .MW_valid        (MW_valid        ),
     .MW_BUS          (MW_BUS          )

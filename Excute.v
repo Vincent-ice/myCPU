@@ -24,6 +24,7 @@ module Excute (
     output  [31:0]              data_sram_addr,
     output reg [31:0]           data_sram_wdata,
     output reg [ 1:0]           data_sram_size,
+    input   [31:0]              data_sram_rdata,
     input                       data_sram_addr_ok,
     input                       data_sram_data_ok,
     output                      data_sram_wr
@@ -67,10 +68,10 @@ assign {inst_E,direct_jump,br_direct_target,predict_indirect_taken,predict_targe
 reg    E_valid;
 reg    ex_flag;
 reg    send_handshake;
-wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sram_addr_ok || data_sram_data_ok || ex_E;
+wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sram_data_ok || ex_E;
 assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall &&
                         (!data_sram_req && !send_handshake || data_sram_data_ok);
-assign EM_valid       = E_valid && E_ready_go && !stall && !data_sram_data_ok;
+assign EM_valid       = E_valid && E_ready_go && !stall;
 always @(posedge clk) begin
     if (!rstn) begin
         DE_BUS_E <= 'b0;
@@ -219,7 +220,8 @@ wire   indirect_jump = inst_beq || inst_bne || inst_blt || inst_bge || inst_bltu
 wire [31:0] br_target = direct_jump ? br_direct_target : br_PC;
 assign PB_BUS_E = {inst_E,direct_jump,indirect_jump,br_taken,br_target};
 //EM BUS
-assign EM_BUS = {PB_BUS_E,          //261:195
+assign EM_BUS = {data_sram_rdata,   //293:262
+                 PB_BUS_E,          //261:195
                  pc_E,              //194:163
                  rf_wdata_E,        //162:131
                  gr_we_E,           //130
