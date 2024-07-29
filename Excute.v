@@ -69,8 +69,7 @@ reg    E_valid;
 reg    ex_flag;
 reg    send_handshake;
 wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sram_data_ok || ex_E;
-assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall &&
-                        (!data_sram_req && !send_handshake || data_sram_data_ok);
+assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall;
 assign EM_valid       = E_valid && E_ready_go && !stall;
 always @(posedge clk) begin
     if (!rstn) begin
