@@ -146,7 +146,7 @@ wire [1:0]          PHT_wdata;
 bimodal_predictor u_bimodal_predictor(.data_i(PHT[PHT_index_W]),.taken(br_taken_W),.data_o(PHT_wdata));
 always @(posedge clk) begin
     if (!rstn) begin
-        for (n = 0;n < 2**12;n = n + 1) begin
+        for (n = 0;n < 2**`BHT_INDEX_Wid;n = n + 1) begin
             BHT[n] <= `BHR_Wid'b0;
         end
         for (n = 0;n < 2**`BHR_Wid;n = n + 1) begin

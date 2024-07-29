@@ -66,7 +66,6 @@ assign D_allowin   = !D_valid || D_ready_go && E_allowin;
 assign DE_valid    = D_valid && D_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
-        D_valid <= 1'b0;
         pDD_BUS_D <= 'b0;
     end
     else if (ex_en) begin
@@ -75,8 +74,12 @@ always @(posedge clk) begin
     else if (pDD_valid && D_allowin) begin
         pDD_BUS_D <= pDD_BUS;
     end
-    
-    if (ex_en) begin
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        D_valid <= 1'b0;
+    end
+    else if (ex_en) begin
         D_valid <= 1'b0;
     end
     else if (D_allowin) begin

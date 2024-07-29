@@ -48,7 +48,6 @@ assign MW_valid      = M_valid && M_ready_go || data_sram_data_ok;
 assign ex_M = M_valid && ex_E;
 always @(posedge clk) begin
     if (!rstn) begin
-        M_valid <= 1'b0;
         EM_BUS_M <= 'b0;
     end
     else if (ex_en) begin
@@ -57,8 +56,12 @@ always @(posedge clk) begin
     else if (EM_valid && M_allowin) begin
         EM_BUS_M <= EM_BUS;
     end
-    
-    if (ex_en) begin
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        M_valid <= 1'b0;
+    end
+    else if (ex_en) begin
         M_valid <= 1'b0;
     end
     else if (M_allowin) begin

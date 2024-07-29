@@ -85,7 +85,9 @@ wire [31:0]                     new_pc;
 wire                            BTB_stall;
 wire                            predict_error_D;
 wire                            predict_error_E;
-wire [ 7:0]                     hardware_interrupt = ext_int;
+wire [ 7:0]                     hardware_interrupt;
+assign hardware_interrupt = ext_int;
+//assign hardware_interrupt = 8'b0;
 
 wire                            inst_sram_req;
 wire [ 3:0]                     inst_sram_wstrb;

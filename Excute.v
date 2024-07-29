@@ -73,7 +73,6 @@ assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall &&
 assign EM_valid       = E_valid && E_ready_go && !stall && !data_sram_data_ok;
 always @(posedge clk) begin
     if (!rstn) begin
-        E_valid <= 1'b0;
         DE_BUS_E <= 'b0;
     end
     else if (ex_en) begin
@@ -82,8 +81,12 @@ always @(posedge clk) begin
     else if (DE_valid && E_allowin) begin
         DE_BUS_E <= DE_BUS;
     end
-    
-    if (ex_en) begin
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        E_valid <= 1'b0;
+    end
+    else if (ex_en) begin
         E_valid <= 1'b0;
     end
     else if (E_allowin) begin

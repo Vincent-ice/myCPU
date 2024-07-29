@@ -269,7 +269,10 @@ end
 
 //ERA
 always @(posedge clk ) begin
-    if (ex_en) begin
+    if (!rstn) begin
+        csr_ERA <= 32'b0;
+    end
+    else if (ex_en) begin
         csr_ERA <= pc;
     end
     else if (ERA_we) begin
@@ -302,7 +305,10 @@ wire va_error = (ecode == `ECODE_ADEM) || (ecode == `ECODE_ALE) ||
                 (ecode == `ECODE_PIF ) || (ecode == `ECODE_PME) ||
                 (ecode == `ECODE_PPI );
 always @(posedge clk ) begin
-    if (BADV_we) begin
+    if (!rstn) begin
+        csr_BADV <= 32'b0;
+    end
+    else if (BADV_we) begin
         csr_BADV <= csr_wdata;
     end
     else if ((ecode == `ECODE_ADEF) && (esubcode == `ESUBCODE_ADEF)) begin
@@ -333,28 +339,40 @@ end
 
 //SAVE0
 always @(posedge clk ) begin
-    if (SAVE0_we) begin
+    if (!rstn) begin
+        csr_SAVE0 <= 32'b0;
+    end
+    else if (SAVE0_we) begin
         csr_SAVE0 <= csr_wdata;
     end 
 end
 
 //SAVE1
 always @(posedge clk ) begin
-    if (SAVE1_we) begin
+    if (!rstn) begin
+        csr_SAVE1 <= 32'b0;
+    end
+    else if (SAVE1_we) begin
         csr_SAVE1 <= csr_wdata;
     end 
 end
 
 //SAVE2
 always @(posedge clk ) begin
-    if (SAVE2_we) begin
+    if (!rstn) begin
+        csr_SAVE2 <= 32'b0;
+    end
+    else if (SAVE2_we) begin
         csr_SAVE2 <= csr_wdata;
     end 
 end
 
 //SAVE3
 always @(posedge clk ) begin
-    if (SAVE3_we) begin
+    if (!rstn) begin
+        csr_SAVE3 <= 32'b0;
+    end
+    else if (SAVE3_we) begin
         csr_SAVE3 <= csr_wdata;
     end 
 end
@@ -391,7 +409,10 @@ end
 
 //TVAL
 always @(posedge clk ) begin
-    if (TCFG_we) begin
+    if (!rstn) begin
+        csr_TVAL <= 32'hffffffff;
+    end
+    else if (TCFG_we) begin
         csr_TVAL <= {csr_wdata[31:2], 2'b0};
     end
     else if (timer_en) begin
