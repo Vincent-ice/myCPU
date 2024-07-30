@@ -151,7 +151,7 @@ always @(posedge clk) begin
 end
 
 //ertn_flush buff
-always @(posedge clk or posedge ertn_flush_i) begin
+always @(posedge clk) begin
     if (!rstn) begin
         ertn_flush <= 1'b0;
     end
