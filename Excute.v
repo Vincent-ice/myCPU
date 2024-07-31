@@ -19,11 +19,20 @@ module Excute (
     output  [`CSR2TLB_BUS_EM_Wid-1:0]  CSR2TLB_BUS,
     output  [`TLB2CSR_BUS_EM_Wid-1:0]  TLB2CSR_BUS,
 
+    output                      ex_E,
     input                       ex_en,
+    output                      predict_error_E,
+    output  [`Branch_BUS_Wid-1:0]  Branch_BUS_E,
 
-    output                      data_sram_en,
-    output  [ 3:0]              data_sram_we,
+    output                      data_sram_req,
+    output reg [ 3:0]           data_sram_wstrb,
     output  [31:0]              data_sram_addr,
+    output reg [31:0]           data_sram_wdata,
+    output reg [ 1:0]           data_sram_size,
+    input   [31:0]              data_sram_rdata,
+    input                       data_sram_addr_ok,
+    input                       data_sram_data_ok,
+    output                      data_sram_wr
     output  [31:0]              data_sram_wdata,
 
     // search port 1 (for load/store)
@@ -42,6 +51,14 @@ module Excute (
     
 //DE BUS
 reg [`DE_BUS_Wid-1:0] DE_BUS_E;
+wire [`WpD_BUS_Wid-1:0] PB_BUS_E;
+wire [31:0] inst_E;
+wire        direct_jump;
+wire [31:0] br_direct_target;
+wire        predict_indirect_taken;
+wire [31:0] predict_target;
+wire        inst_beq,inst_bne,inst_bge,inst_blt,inst_bgeu,inst_bltu;
+wire [31:0] br_PC;
 wire [31:0] pc_E;
 wire [`alu_op_Wid-1:0] alu_op_E;
 wire [31:0] alu_src1_E;
@@ -62,50 +79,70 @@ wire [31:0] csr_wmask_E;
 wire [31:0] csr_wdata_E;
 wire        res_from_csr_E;
 
-assign {pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
+assign {inst_E,direct_jump,br_direct_target,predict_indirect_taken,predict_target,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,br_PC,
+        pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
         ex_D,ecode_D,esubcode_D,csr_addr_E,csr_we_E,csr_rdata_E,csr_wmask_E,csr_wdata_E,res_from_csr_E} = DE_BUS_E;
 
 reg  [`CSR2TLB_BUS_DE_Wid-1:0] CSR2TLB_BUS_E;
 //pipeline handshake
 reg    E_valid;
 reg    ex_flag;
-wire   ex_E;
-wire   E_ready_go     = 1'b1;
+reg    send_handshake;
+wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sram_data_ok || ex_E;
 assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall;
 assign EM_valid       = E_valid && E_ready_go && !stall;
 always @(posedge clk) begin
     if (!rstn) begin
-        E_valid <= 1'b0;
         DE_BUS_E <= 'b0;
         CSR2TLB_BUS_E <= 'b0;
     end
     else if (ex_en) begin
         DE_BUS_E <= 'b0;
+        CSR2TLB_BUS_E <= 'b0;
     end
-    else if (E_allowin) begin
-        E_valid <= DE_valid && (!ex_flag && !ex_E || ex_en);
-    end
-
-    if (DE_valid && E_allowin) begin
+    else if (DE_valid && E_allowin) begin
         DE_BUS_E <= DE_BUS;
         CSR2TLB_BUS_E <= CSR2TLB_BUS_D;
+    end
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        E_valid <= 1'b0;
+    end
+    else if (ex_en) begin
+        E_valid <= 1'b0;
+    end
+    else if (E_allowin) begin
+        E_valid <= DE_valid && (!ex_flag && !ex_E && !ex_en) && !predict_error_E;
+    end
+end
+
+always @(posedge clk) begin
+    if (!rstn) begin
+        send_handshake <= 1'b0;
+    end
+    else if(data_sram_data_ok) begin
+        send_handshake <= 1'b0;
+    end
+    else if(data_sram_addr_ok & data_sram_req) begin
+        send_handshake <= 1'b1;
     end
 end
 
 //ALU
 wire [31:0] alu_result_E;
 wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_flag}};
+wire        alu_overflow;
 
 alu u_alu(
     .clk          (clk         ),
     .rstn         (rstn        ),
-    .alu_op       (alu_op    ),
+    .alu_op       (alu_op      ),
     .alu_src1     (alu_src1_E  ),
     .alu_src2     (alu_src2_E  ),
     .alu_result   (alu_result_E),
     .div_stall    (stall       )
     );
-
 //address translation
 wire [31:0] vaddr;
 wire        inst_tlbsrch;
@@ -189,20 +226,55 @@ assign paddr = da_hit  ? vaddr    :
                          tlb_addr ;
 
 //data sram manage
-assign data_sram_en    = E_valid && (|mem_we_E || |res_from_mem_E);
-assign data_sram_we    = E_valid && !ex_E ? mem_we_E[3] ? 4'b1111                          :
-                                            mem_we_E[1] ? (vaddr[1] ? 4'b1100 : 4'b0011) :
-                                            mem_we_E[0] ? (vaddr[1] ? vaddr[0] ? 4'b1000 : 4'b0100 : vaddr[0] ? 4'b0010 : 4'b0001)
-                                                        : 4'b0000
-                                          : 4'b0000;
+wire [31:0] vaddr_E = alu_result_E;
+wire        req = E_valid && !ex_E && !send_handshake && (|mem_we_E || |res_from_mem_E);
+reg         req_reg;
+always @(posedge clk) begin
+    if (!rstn) begin
+        req_reg <= 1'b0;
+    end
+    else if (req & !data_sram_addr_ok) begin
+        req_reg <= 1'b1;
+    end 
+    else if (data_sram_addr_ok) begin
+        req_reg <= 1'b0;
+    end
+end
+assign data_sram_req = (req | req_reg);
+
+always @(*) begin
+    case ({mem_we_E,vaddr_E[1:0]})
+        6'b0001_00 : {data_sram_wstrb,data_sram_size} = 6'b0001_00;
+        6'b0001_01 : {data_sram_wstrb,data_sram_size} = 6'b0010_00;
+        6'b0001_10 : {data_sram_wstrb,data_sram_size} = 6'b0100_00;
+        6'b0001_11 : {data_sram_wstrb,data_sram_size} = 6'b1000_00;
+        6'b0011_00 : {data_sram_wstrb,data_sram_size} = 6'b0011_01;
+        6'b0011_01 : {data_sram_wstrb,data_sram_size} = 6'b0011_01;
+        6'b0011_10 : {data_sram_wstrb,data_sram_size} = 6'b1100_01;
+        6'b0011_11 : {data_sram_wstrb,data_sram_size} = 6'b1100_01;
+        6'b1111_00 : {data_sram_wstrb,data_sram_size} = 6'b1111_10;
+        6'b1111_01 : {data_sram_wstrb,data_sram_size} = 6'b1111_10;
+        6'b1111_10 : {data_sram_wstrb,data_sram_size} = 6'b1111_10;
+        6'b1111_11 : {data_sram_wstrb,data_sram_size} = 6'b1111_10;
+        default    : {data_sram_wstrb,data_sram_size} = 6'b0000_00;
+    endcase
+end
+
 assign data_sram_addr  = paddr;
-assign data_sram_wdata = mem_we_E[3] ? rkd_value_E            : 
-                         mem_we_E[1] ? {2{rkd_value_E[15:0]}} :
-                         mem_we_E[0] ? {4{rkd_value_E[7:0]}}  : 32'b0;
+
+always @(*) begin
+    case (mem_we_E)
+        4'b0001 : data_sram_wdata = {4{rkd_value_E[7:0]}};
+        4'b0011 : data_sram_wdata = {2{rkd_value_E[15:0]}};
+        4'b1111 : data_sram_wdata = rkd_value_E;
+        default : data_sram_wdata = 32'b0;
+    endcase
+end
+assign data_sram_wr = (|mem_we_E);
 
 //exception manage
-wire        ex_ALE        = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
-                         ((mem_we_E[1] | res_from_mem_E[1])&( data_sram_addr[0]  ));
+wire        ex_ALE     = ((mem_we_E[3] | res_from_mem_E[3])&(|vaddr[1:0])) ||
+                         ((mem_we_E[1] | res_from_mem_E[1])&( vaddr[0]  ));
 wire        ex_TLBR    = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & ~s1_found;
 wire        ex_PIL     = ~da_hit & ~dmw_hit & res_from_mem_E & s1_found & ~s1_v;
 wire        ex_PIS     = ~da_hit & ~dmw_hit & mem_we_E & s1_found & ~s1_v;
@@ -238,8 +310,37 @@ end
 //regfile wdata from csr
 wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
 
+//indirect predict branch judge
+wire rj_eq_rd = (alu_src1_E == alu_src2_E);
+wire rj_lt_rd = ($signed(alu_src1_E) < $signed(alu_src2_E));
+wire rj_ltu_rd= (alu_src1_E < alu_src2_E);
+reg  br_taken;
+wire [31:0] br_target_final;
+always @(*) begin
+    case (1'b1)
+        inst_beq  : br_taken = rj_eq_rd;
+        inst_bne  : br_taken = !rj_eq_rd;
+        inst_blt  : br_taken = rj_lt_rd;
+        inst_bge  : br_taken = !rj_lt_rd;
+        inst_bltu : br_taken = rj_ltu_rd;
+        inst_bgeu : br_taken = !rj_ltu_rd;
+        default   : br_taken = 1'b0;
+    endcase
+end
+
+assign predict_error_E = E_valid && (br_taken ^ predict_indirect_taken ||
+                         br_taken & predict_indirect_taken & (br_PC != predict_target));
+assign br_target_final= br_taken ? br_PC : pc_E + 32'd4;
+
+assign Branch_BUS_E = {predict_error_E,br_target_final};
+
+wire   indirect_jump = inst_beq || inst_bne || inst_blt || inst_bge || inst_bltu || inst_bgeu;
+wire [31:0] br_target = direct_jump ? br_direct_target : br_PC;
+assign PB_BUS_E = {inst_E,direct_jump,indirect_jump,br_taken,br_target};
 //EM BUS
-assign EM_BUS = {pc_E,              //194:163
+assign EM_BUS = {data_sram_rdata,   //293:262
+                 PB_BUS_E,          //261:195
+                 pc_E,              //194:163
                  rf_wdata_E,        //162:131
                  gr_we_E,           //130
                  dest_E,            //129:125

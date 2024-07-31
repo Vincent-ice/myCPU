@@ -5,8 +5,8 @@ module alu(
   input  wire [`alu_op_Wid-1:0] alu_op,
   input  wire [31:0] alu_src1,
   input  wire [31:0] alu_src2,
-  output wire [31:0] alu_result,
-  output wire        div_stall
+  output reg  [31:0] alu_result,
+  output wire        stall
 );
  
 wire op_add;   //add operation
@@ -105,16 +105,32 @@ assign sr64_result = {{32{op_sra & alu_src1[31]}}, alu_src1[31:0]} >> alu_src2[4
 assign sr_result   = sr64_result[31:0];
  
 // MUL, MULH, MULHU result
+wire [31:0] mul_op1 = op_mul | op_mulh | op_mulhu ? alu_src1 : 32'b0;
+wire [31:0] mul_op2 = op_mul | op_mulh | op_mulhu ? alu_src2 : 32'b0;
 multCore u_multCore(
-  .op1     (alu_src1          ),
-  .op2     (alu_src2          ),
+  .clk     (clk               ),
+  .rstn    (rstn              ),
+  .op1     (mul_op1           ),
+  .op2     (mul_op2           ),
   .sign_en (op_mul | op_mulh  ),
   .out     (mul_result        )
-);
+);//2-cycle multiply
 /* wire signed [63:0] mul_sign = $signed(alu_src1) * $signed(alu_src2);
 wire        [63:0] mul_unsign = alu_src1 * alu_src2;
-assign mul_result = (op_mul | op_mulh) ? mul_sign : mul_unsign; */
+assign mul_result = (op_mul | op_mulh) ? mul_sign :
+                    op_mulhu           ? mul_unsign : 64'b0; */
 
+wire mult_stall;
+reg  mult_stall_delay;
+always @(posedge clk) begin
+    if (!rstn) begin
+        mult_stall_delay <= 1'b0;
+    end
+    else begin
+        mult_stall_delay <= mult_stall;
+    end
+end
+assign mult_stall = (op_mul | op_mulh | op_mulhu) ^ mult_stall_delay;
 // DIV, DIVU, MOD, MODU result
 wire div_ready;
 reg  div_ready_delay;
@@ -128,7 +144,7 @@ wire div_complete;
 
 divCore_srt2 u_divCore_srt2(
   .clk     (clk          ),
-  .rst     (rstn         ),
+  .rstn    (rstn         ),
   .enable  (div_en       ),
   .sign_en (div_sign     ),
   .op1     (alu_src1     ),
@@ -138,9 +154,14 @@ divCore_srt2 u_divCore_srt2(
   .ready   (div_ready    ),
   .complete(div_complete )
 );
-assign div_stall = ~div_ready;
-always @(posedge clk ) begin
+wire div_stall = ~div_ready;
+always @(posedge clk) begin
+  if (!rstn) begin
+    div_ready_delay <= 1'b0;
+  end
+  else begin
     div_ready_delay <= div_ready;
+  end
 end
 
   // div result history
@@ -182,39 +203,54 @@ generate
 endgenerate
 assign div_history_find = |find_buff;
 
-assign rem_result = dividend_is_0    ? 32'b0                          :
-                    div_history_find ? (find_buff[0] ? rem_history[0] : 
-                                        find_buff[1] ? rem_history[1] :
-                                        find_buff[2] ? rem_history[2] :
-                                        find_buff[3] ? rem_history[3] :
-                                        find_buff[4] ? rem_history[4] :
-                                        find_buff[5] ? rem_history[5] :
-                                        find_buff[6] ? rem_history[6] :
-                                        find_buff[7] ? rem_history[7] : 32'b0) : rem;
-assign quo_result = dividend_is_0    ? 32'b0                          :
-                    div_history_find ? (find_buff[0] ? quo_history[0] :
-                                        find_buff[1] ? quo_history[1] :
-                                        find_buff[2] ? quo_history[2] :
-                                        find_buff[3] ? quo_history[3] :
-                                        find_buff[4] ? quo_history[4] :
-                                        find_buff[5] ? quo_history[5] :
-                                        find_buff[6] ? quo_history[6] :
-                                        find_buff[7] ? quo_history[7] : 32'b0) : quo;
+reg [31:0] find_rem;
+reg [31:0] find_quo;
+always @(*) begin
+  case (1'b1)
+    find_buff[0] : begin find_rem = rem_history[0]; find_quo = quo_history[0]; end
+    find_buff[1] : begin find_rem = rem_history[1]; find_quo = quo_history[1]; end
+    find_buff[2] : begin find_rem = rem_history[2]; find_quo = quo_history[2]; end
+    find_buff[3] : begin find_rem = rem_history[3]; find_quo = quo_history[3]; end
+    find_buff[4] : begin find_rem = rem_history[4]; find_quo = quo_history[4]; end
+    find_buff[5] : begin find_rem = rem_history[5]; find_quo = quo_history[5]; end
+    find_buff[6] : begin find_rem = rem_history[6]; find_quo = quo_history[6]; end
+    find_buff[7] : begin find_rem = rem_history[7]; find_quo = quo_history[7]; end
+    default      : begin find_rem = 32'b0         ; find_quo = 32'b0         ; end
+  endcase
+end
+
+assign rem_result = dividend_is_0    ? 32'b0    :
+                    div_history_find ? find_rem : rem;
+assign quo_result = dividend_is_0    ? 32'b0    :
+                    div_history_find ? find_quo : quo;
+
+// stall signal
+assign stall = mult_stall | div_stall;
 
 // final result mux
-assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
-                  | ({32{op_slt       }} & slt_result)
-                  | ({32{op_sltu      }} & sltu_result)
-                  | ({32{op_and       }} & and_result)
-                  | ({32{op_nor       }} & nor_result)
-                  | ({32{op_or        }} & or_result)
-                  | ({32{op_xor       }} & xor_result)
-                  | ({32{op_lui       }} & lui_result)
-                  | ({32{op_sll       }} & sll_result)
-                  | ({32{op_srl|op_sra}} & sr_result)
-                  | ({32{op_mul       }} & mul_result[31: 0])
-                  | ({32{op_mulh|op_mulhu}} & mul_result[63:32])
-                  | ({32{op_div|op_divu}} & quo_result)
-                  | ({32{op_mod|op_modu}} & rem_result);
- 
+always @(*) begin
+  case (1'b1)
+    op_add : alu_result = add_sub_result;
+    op_sub : alu_result = add_sub_result;
+    op_slt : alu_result = slt_result;
+    op_sltu: alu_result = sltu_result;
+    op_and : alu_result = and_result;
+    op_nor : alu_result = nor_result;
+    op_or  : alu_result = or_result;
+    op_xor : alu_result = xor_result;
+    op_lui : alu_result = lui_result;
+    op_sll : alu_result = sll_result;
+    op_srl : alu_result = sr_result;
+    op_sra : alu_result = sr_result;
+    op_mul : alu_result = mul_result[31: 0];
+    op_mulh: alu_result = mul_result[63:32];
+    op_mulhu:alu_result = mul_result[63:32];
+    op_div : alu_result = quo_result;
+    op_mod : alu_result = rem_result;
+    op_divu: alu_result = quo_result;
+    op_modu: alu_result = rem_result;
+    default: alu_result = 32'b0;
+  endcase
+end
+
 endmodule

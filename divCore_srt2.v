@@ -1,6 +1,6 @@
 module divCore_srt2(
 	input			  clk,
-	input			  rst,
+	input			  rstn,
     input             enable,
 	input 			  sign_en, // 1->signed divide
 	input		[31:0] op1,	   // dividend
@@ -42,8 +42,11 @@ wire [5:0] iter;
 always @(*) begin
 	case(state_reg)
 		ST_IDLE: begin
-			if(enable & ready) begin
+			if(enable) begin
 				state_next = ST_SAMP;
+			end
+			else begin
+				state_next = ST_IDLE;
 			end
 		end
 		ST_SAMP: begin
@@ -52,6 +55,9 @@ always @(*) begin
 		ST_DIV: begin
 			if(cnt==iter+1) begin
 				state_next = ST_OUT;
+			end
+			else begin
+				state_next = ST_DIV;
 			end
 		end
 		ST_OUT: begin
@@ -63,8 +69,8 @@ always @(*) begin
 	endcase
 end
 
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		state_reg <= ST_IDLE;
 	end else begin
 		state_reg <= state_next;
@@ -74,10 +80,10 @@ end
 assign complete = state_reg==ST_OUT ? 1'b1 : 1'b0;
 
 always @(*) begin
-	if(!rst) begin
+	if(!rstn) begin
 		ready <= 1'b1;
 	end else begin
-		if(rst & state_next==ST_IDLE) begin
+		if(rstn & state_next==ST_IDLE) begin
 			ready <= 1'b1;
 		end else begin
 			ready <= 1'b0;
@@ -87,8 +93,8 @@ end
 
 assign subs = op2_ld - op1_s;
 assign iter = subs[5] ? 6'd0 : subs[5:0];
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		cnt <= 6'd0;
 	end else begin
 		if(state_next==ST_DIV) begin
@@ -105,8 +111,8 @@ end
 
 //------------------------ PROCESS ------------------------//
 
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		op1_i <= 34'b0;
 		op2_i <= 34'b0;
 	end else begin
@@ -121,7 +127,7 @@ end
 find_ld_r2 #(34) u_find_ld_r2_1 (.op(op1_i), .pos(op1_ld));
 find_ld_r2 #(34) u_find_ld_r2_2 (.op(op2_i), .pos(op2_ld));
 /* always @(*) begin
-	if(!rst) begin
+	if(!rstn) begin
 		op1_s <= 'd0;
 	end else begin
 		if(op1_ld[0]^op2_ld[0]) begin
@@ -151,8 +157,8 @@ generate
 endgenerate
 
 // residual remainder
-always @(posedge clk or negedge rst) begin
-	if(!rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		rem_r <= 'd0;
 	end else begin
 		if(state_next==ST_SAMP) begin
@@ -178,7 +184,7 @@ end
 // on the fly conversion
 assign ops_sign = sign_en&(op1[31]^op2[31]);
 always @(posedge clk) begin
-	if(!rst) begin
+	if(!rstn) begin
 		Q_reg   <= 'b0;
 		QM_reg  <= 'b0;
 	end else begin
@@ -194,32 +200,31 @@ always @(posedge clk) begin
 end
 
 always @(*) begin
-	if(!rst) begin
-		Q_next  <= 'b0;
-		QM_next <= 'b0;
-	end else begin
-		if(state_next==ST_SAMP) begin
-			Q_next <= {34{ops_sign}};
-			QM_next<= {34{ops_sign}};
+	if(state_next==ST_SAMP) begin
+		Q_next  = {34{ops_sign}};
+		QM_next = {34{ops_sign}};
+	end
+	else if(state_reg==ST_DIV) begin
+		if(!n) begin	
+			Q_next  = {Q_reg[32:0],q};
+		end else begin
+			Q_next  = {QM_reg[32:0],q};
 		end
-		else if(state_reg==ST_DIV) begin
-			if(!n) begin	
-				Q_next  <= {Q_reg[32:0],q};
-			end else begin
-				Q_next  <= {QM_reg[32:0],q};
-			end
-			if(!n & q) begin	
-				QM_next <= {Q_reg[32:0],~q};
-			end else begin
-				QM_next <= {QM_reg[32:0],~q};
-			end
+		if(!n & q) begin	
+			QM_next = {Q_reg[32:0],~q};
+		end else begin
+			QM_next = {QM_reg[32:0],~q};
 		end
+	end
+	else begin
+		Q_next  = Q_reg;
+		QM_next = QM_reg;
 	end
 end
 
 // post proccessing
-always @(posedge clk or negedge rst) begin
-	if(~rst) begin
+always @(posedge clk or negedge rstn) begin
+	if(!rstn) begin
 		rem_o	<=	32'd0;
 		quo_o   <=  32'd0;
 	end else begin
@@ -289,9 +294,9 @@ integer i;
 always @(*) begin
 	for(i=0; i<WID; i=i+1) begin
 		if(op[WID-1]==1'b0) begin
-			op_t[i] <= op[WID-1-i];
+			op_t[i] = op[WID-1-i];
 		end else begin
-			op_t[i] <= ~op[WID-1-i];
+			op_t[i] = ~op[WID-1-i];
 		end
 	end
 end
@@ -300,7 +305,7 @@ integer j;
 always @(*) begin
 	for(j=0; j<WID; j=j+1) begin
 		if(pos_oh[j]==1) begin
-			pos <= j-1;
+			pos = j-1;
 		end
 	end
 end
@@ -324,9 +329,9 @@ output reg q;
 output     neg;
 always @(*) begin
 	if((r[WID-2:WID-4] < 3'b010) | (r[WID-2:WID-4] >= 3'b110)) begin
-		q <= 1'b0;
+		q = 1'b0;
 	end else begin
-		q <= 1'b1;
+		q = 1'b1;
 	end
 end
 assign neg = (q==1'b1) & (sd!=r[WID-1]);

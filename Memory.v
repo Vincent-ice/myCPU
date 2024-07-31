@@ -44,6 +44,8 @@ module Memory (
 
 //EM BUS
 reg [`EM_BUS_Wid-1:0] EM_BUS_M;
+wire [31:0] data_sram_rdata;
+wire [`WpD_BUS_Wid-1:0] PB_BUS_M;
 wire [31:0] pc_M;
 wire [31:0] rf_wdata_M;
 wire        gr_we_M;
@@ -58,7 +60,7 @@ wire        csr_we_M;
 wire [31:0] csr_wmask_M;
 wire [31:0] csr_wdata_M;
 
-assign {pc_M,rf_wdata_M,gr_we_M,dest_M,res_from_mem_M,vaddr_M,
+assign {data_sram_rdata,PB_BUS_M,pc_M,rf_wdata_M,gr_we_M,dest_M,res_from_mem_M,vaddr_M,
         ex_E,ecode_M,esubcode_M,csr_addr_M,csr_we_M,csr_wmask_M,csr_wdata_M} = EM_BUS_M;
 
 reg  [`CSR2TLB_BUS_EM_Wid-1:0] CSR2TLB_BUS_M;
@@ -71,22 +73,30 @@ assign MW_valid      = M_valid && M_ready_go;
 assign ex_M = M_valid && ex_E;
 always @(posedge clk) begin
     if (!rstn) begin
-        M_valid <= 1'b0;
         EM_BUS_M <= 'b0;
         CSR2TLB_BUS_M <= 'b0;
         TLB2CSR_BUS_M <= 'b0;
     end
     else if (ex_en) begin
         EM_BUS_M <= 'b0;
+        CSR2TLB_BUS_M <= 'b0;
+        TLB2CSR_BUS_M <= 'b0;
     end
-    else if (M_allowin) begin
-        M_valid <= EM_valid && (!ex_M || ex_en);
-    end
-
-    if (EM_valid && M_allowin) begin
+    else if (EM_valid && M_allowin) begin
         EM_BUS_M <= EM_BUS;
         CSR2TLB_BUS_M <= CSR2TLB_BUS_E;
         TLB2CSR_BUS_M <= TLB2CSR_BUS_E;
+    end
+end
+always @(posedge clk) begin
+    if (!rstn) begin
+        M_valid <= 1'b0;
+    end
+    else if (ex_en) begin
+        M_valid <= 1'b0;
+    end
+    else if (M_allowin) begin
+        M_valid <= EM_valid && (!ex_M || ex_en);
     end
 end
 
@@ -134,7 +144,8 @@ assign mem_result_M   = res_from_mem_M[3] ? data_sram_rdata                     
 assign final_result_M = |res_from_mem_M ? mem_result_M : rf_wdata_M;
 
 //MW BUS
-assign MW_BUS = {pc_M,          //190:159
+assign MW_BUS = {PB_BUS_M,      //257:191
+                 pc_M,          //190:159
                  final_result_M,//158:127
                  gr_we_M,       //126
                  dest_M,        //125:121
