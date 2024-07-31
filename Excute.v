@@ -193,8 +193,8 @@ wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
 
 //indirect predict branch judge
 wire rj_eq_rd = (alu_src1_E == alu_src2_E);
-wire rj_lt_rd = alu_result_E[0];
-wire rj_ltu_rd= alu_result_E[0];
+wire rj_lt_rd = ($signed(alu_src1_E) < $signed(alu_src2_E));
+wire rj_ltu_rd= (alu_src1_E < alu_src2_E);
 reg  br_taken;
 wire [31:0] br_target_final;
 always @(*) begin
