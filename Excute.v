@@ -32,8 +32,7 @@ module Excute (
     input   [31:0]              data_sram_rdata,
     input                       data_sram_addr_ok,
     input                       data_sram_data_ok,
-    output                      data_sram_wr
-    output  [31:0]              data_sram_wdata,
+    output                      data_sram_wr,
 
     // search port 1 (for load/store)
     output wire [              18:0] s1_vppn,
@@ -132,7 +131,6 @@ end
 //ALU
 wire [31:0] alu_result_E;
 wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_flag}};
-wire        alu_overflow;
 
 alu u_alu(
     .clk          (clk         ),
@@ -141,7 +139,7 @@ alu u_alu(
     .alu_src1     (alu_src1_E  ),
     .alu_src2     (alu_src2_E  ),
     .alu_result   (alu_result_E),
-    .div_stall    (stall       )
+    .stall        (stall       )
     );
 //address translation
 wire [31:0] vaddr;
@@ -180,9 +178,11 @@ wire [ 1:0] csr_CRMD_PLV;
 wire        csr_DMW0_PLV0;
 wire        csr_DMW0_PLV3;
 wire [ 2:0] csr_DMW0_VSEG;
+wire [ 2:0] csr_DMW0_PSEG;
 wire        csr_DMW1_PLV0;
 wire        csr_DMW1_PLV3;
 wire [ 2:0] csr_DMW1_VSEG;
+wire [ 2:0] csr_DMW1_PSEG;
 assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
         csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,csr_DMW0_PSEG,
         csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG,csr_DMW1_PSEG} = CSR2FE_BUS;

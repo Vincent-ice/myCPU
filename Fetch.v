@@ -28,7 +28,7 @@ module Fetch (
     input                           inst_sram_addr_ok,
     input                           inst_sram_data_ok,
     output   [31:0]                 inst_sram_wdata,
-    input    [31:0]                 inst_sram_rdata
+    input    [31:0]                 inst_sram_rdata,
 
     input  [`CSR2FE_BUS_Wid-1:0] CSR2FE_BUS,
     output [               18:0] s0_vppn,
@@ -209,9 +209,11 @@ wire [ 1:0] csr_CRMD_PLV;
 wire        csr_DMW0_PLV0;
 wire        csr_DMW0_PLV3;
 wire [ 2:0] csr_DMW0_VSEG;
+wire [ 2:0] csr_DMW0_PSEG;
 wire        csr_DMW1_PLV0;
 wire        csr_DMW1_PLV3;
 wire [ 2:0] csr_DMW1_VSEG;
+wire [ 2:0] csr_DMW1_PSEG;
 assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
         csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,csr_DMW0_PSEG,
         csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG,csr_DMW1_PSEG} = CSR2FE_BUS;

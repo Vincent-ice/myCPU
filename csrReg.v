@@ -280,8 +280,7 @@ always @(posedge clk ) begin
         csr_ECFG <= 32'b0;
     end
     else if (ECFG_we) begin
-        csr_ECFG[9:0] <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & csr_ECFG[9:0];
-        csr_ECFG[12:11] <= csr_wdata[12:11] & csr_wmask[12:11] | ~csr_wmask[12:11] & csr_ECFG[12:11];
+        csr_ECFG[12:0] <= csr_wdata[12:0] & csr_wmask[12:0] | ~csr_wmask[12:0] & csr_ECFG[12:0];
     end
 end
 

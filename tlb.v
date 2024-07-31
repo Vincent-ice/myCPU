@@ -4,13 +4,14 @@ module tlb
 )
 (
     input  wire                      clk,
+    input  wire                      rstn,
 
     // search port 0 (for fetch)
     input  wire [              18:0] s0_vppn,
     input  wire                      s0_va_bit12,
     input  wire [               9:0] s0_asid,
     output wire                      s0_found,
-    output wire [$clog2(TLBNUM)-1:0] s0_index,
+    output reg  [$clog2(TLBNUM)-1:0] s0_index,
     output wire [              19:0] s0_ppn,
     output wire [               5:0] s0_ps,
     output wire [               1:0] s0_plv,
@@ -23,7 +24,7 @@ module tlb
     input  wire                      s1_va_bit12,
     input  wire [               9:0] s1_asid,
     output wire                      s1_found,
-    output wire [$clog2(TLBNUM)-1:0] s1_index,
+    output reg  [$clog2(TLBNUM)-1:0] s1_index,
     output wire [              19:0] s1_ppn,
     output wire [               5:0] s1_ps,
     output wire [               1:0] s1_plv,
@@ -116,38 +117,48 @@ endgenerate */
 assign s0_found = |match0;
 assign s1_found = |match1;
 
-assign s0_index = match0[ 0] ?  0 :
-                  match0[ 1] ?  1 :
-                  match0[ 2] ?  2 :
-                  match0[ 3] ?  3 :
-                  match0[ 4] ?  4 :
-                  match0[ 5] ?  5 :
-                  match0[ 6] ?  6 :
-                  match0[ 7] ?  7 :
-                  match0[ 8] ?  8 :
-                  match0[ 9] ?  9 :
-                  match0[10] ? 10 :
-                  match0[11] ? 11 :
-                  match0[12] ? 12 :
-                  match0[13] ? 13 :
-                  match0[14] ? 14 :
-                  match0[15] ? 15 : 0;
-assign s1_index = match1[ 0] ?  0 :
-                  match1[ 1] ?  1 :
-                  match1[ 2] ?  2 :
-                  match1[ 3] ?  3 :
-                  match1[ 4] ?  4 :
-                  match1[ 5] ?  5 :
-                  match1[ 6] ?  6 :
-                  match1[ 7] ?  7 :
-                  match1[ 8] ?  8 :
-                  match1[ 9] ?  9 :
-                  match1[10] ? 10 :
-                  match1[11] ? 11 :
-                  match1[12] ? 12 :
-                  match1[13] ? 13 :
-                  match1[14] ? 14 :
-                  match1[15] ? 15 : 0;
+always @(*) begin
+    case (1'b1)
+        match0[0]: s0_index = 0;
+        match0[1]: s0_index = 1;
+        match0[2]: s0_index = 2;
+        match0[3]: s0_index = 3;
+        match0[4]: s0_index = 4;
+        match0[5]: s0_index = 5;
+        match0[6]: s0_index = 6;
+        match0[7]: s0_index = 7;
+        match0[8]: s0_index = 8;
+        match0[9]: s0_index = 9;
+        match0[10]: s0_index = 10;
+        match0[11]: s0_index = 11;
+        match0[12]: s0_index = 12;
+        match0[13]: s0_index = 13;
+        match0[14]: s0_index = 14;
+        match0[15]: s0_index = 15;
+        default   : s0_index = 0;
+    endcase
+end
+always @(*) begin
+    case (1'b1)
+        match1[0]: s1_index = 0;
+        match1[1]: s1_index = 1;
+        match1[2]: s1_index = 2;
+        match1[3]: s1_index = 3;
+        match1[4]: s1_index = 4;
+        match1[5]: s1_index = 5;
+        match1[6]: s1_index = 6;
+        match1[7]: s1_index = 7;
+        match1[8]: s1_index = 8;
+        match1[9]: s1_index = 9;
+        match1[10]: s1_index = 10;
+        match1[11]: s1_index = 11;
+        match1[12]: s1_index = 12;
+        match1[13]: s1_index = 13;
+        match1[14]: s1_index = 14;
+        match1[15]: s1_index = 15;
+        default   : s1_index = 0;
+    endcase 
+end
 
 wire s0_choose_bit = (s0_ps == 6'd21)? s0_vppn[8] : s0_va_bit12;
 wire s1_choose_bit = (s1_ps == 6'd21)? s1_vppn[8] : s1_va_bit12;
@@ -170,7 +181,7 @@ assign s1_v   = (s1_choose_bit)? tlb_v1  [s1_index] : tlb_v0  [s1_index];
 // TLB write logic
 always @(posedge clk) begin
     if (we) begin
-        tlb_e[w_index]     <= w_e;
+        //tlb_e[w_index]     <= w_e;
         tlb_ps4MB[w_index] <= (w_ps == 21) ? 1'b1 : 1'b0;
         tlb_vppn[w_index]  <= w_vppn;
         tlb_asid[w_index]  <= w_asid;
@@ -212,14 +223,16 @@ generate for (i2 = 0; i2 < TLBNUM ; i2=i2+1) begin
     assign cond[i2][0] = tlb_g[i2] == 1'b1;
     assign cond[i2][1] = tlb_g[i2] == 1'b0;
     assign cond[i2][2] = s1_asid == tlb_asid[i2];
-    assign cond[i2][3] = s1_vppn == tlb_vppn[i2] && !((s1_ps == 6'd22) ^ tlb_ps4MB[i2]);
+    assign cond[i2][3] = s1_vppn == tlb_vppn[i2] && !((s1_ps == 6'd21) ^ tlb_ps4MB[i2]);
 end
 endgenerate
 
 genvar i3;
 generate for(i3=0; i3<TLBNUM;i3=i3+1) begin
     always @(posedge clk) begin
-        if (we && w_index == i3)
+        if (!rstn)
+            tlb_e[i3] <= 1'b0;
+        else if (we && (w_index == i3))
             tlb_e[w_index] <= w_e;
         else if((invtlb_op == 0 || 
                  invtlb_op == 1 || 

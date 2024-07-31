@@ -103,7 +103,7 @@ end
 
 //TLB data
 assign {invtlb_valid,invtlb_op,we,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
-        w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1} = CSR2TLB_BUS_M;
+        w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1} = CSR2TLB_BUS_W;
 assign TLB2CSR_BUS = TLB2CSR_BUS_W;
 
 //Wrf BUS

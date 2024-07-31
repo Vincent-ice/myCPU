@@ -265,7 +265,19 @@ Fetch u_Fetch(
     .inst_sram_addr_ok (inst_sram_addr_ok),
     .inst_sram_data_ok (inst_sram_data_ok),
     .inst_sram_wr      (inst_sram_wr     ),
-    .inst_sram_rdata   (inst_sram_rdata  )
+    .inst_sram_rdata   (inst_sram_rdata  ),
+    .CSR2FE_BUS      (CSR2FE_BUS      ),
+    .s0_vppn         (s0_vppn         ),
+    .s0_va_bit12     (s0_va_bit12     ),
+    .s0_asid         (s0_asid         ),
+    .s0_found        (s0_found        ),
+    .s0_index        (s0_index        ),
+    .s0_ppn          (s0_ppn          ),
+    .s0_ps           (s0_ps           ),
+    .s0_plv          (s0_plv          ),
+    .s0_mat          (s0_mat          ),
+    .s0_d            (s0_d            ),
+    .s0_v            (s0_v            )
 );
 
 preDecode u_preDecode(
@@ -285,21 +297,8 @@ preDecode u_preDecode(
     .ertn_flush      (ertn_flush      ),
     .ex_D            (ex_D            ),
     .ex_E            (ex_E            ),
-    .ex_en           (ex_en           ),
-    .FD_valid        (FD_valid        ),
-    .FD_BUS          (FD_BUS          ),
-    .CSR2FE_BUS      (CSR2FE_BUS      ),
-    .s0_vppn         (s0_vppn         ),
-    .s0_va_bit12     (s0_va_bit12     ),
-    .s0_asid         (s0_asid         ),
-    .s0_found        (s0_found        ),
-    .s0_index        (s0_index        ),
-    .s0_ppn          (s0_ppn          ),
-    .s0_ps           (s0_ps           ),
-    .s0_plv          (s0_plv          ),
-    .s0_mat          (s0_mat          ),
-    .s0_d            (s0_d            ),
-    .s0_v            (s0_v            )
+    .ex_en           (ex_en           )
+
 );
 
 Decode u_Decode(
@@ -340,12 +339,35 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
-    .ex_E            (ex_E            ),
     .CSR2FE_BUS      (CSR2FE_BUS      ),
     .CSR2TLB_BUS_D   (CSR2TLB_BUS_DE  ),
     .CSR2TLB_BUS     (CSR2TLB_BUS_EM  ),
     .TLB2CSR_BUS     (TLB2CSR_BUS_EM  ),
+    .ex_E            (ex_E            ),
     .ex_en           (ex_en           ),
+    .predict_error_E (predict_error_E ),
+    .Branch_BUS_E    (Branch_BUS_E    ),
+    .data_sram_req   (data_sram_req   ),
+    .data_sram_wstrb (data_sram_wstrb ),
+    .data_sram_addr  (data_sram_addr  ),
+    .data_sram_wdata (data_sram_wdata ),
+    .data_sram_size  (data_sram_size  ),
+    .data_sram_rdata (data_sram_rdata ),
+    .data_sram_addr_ok (data_sram_addr_ok),
+    .data_sram_data_ok (data_sram_data_ok),
+    .data_sram_wr    (data_sram_wr    ),
+
+    .s1_vppn         (s1_vppn         ),
+    .s1_va_bit12     (s1_va_bit12     ),
+    .s1_asid         (s1_asid         ),
+    .s1_found        (s1_found        ),
+    .s1_index        (s1_index        ),
+    .s1_ppn          (s1_ppn          ),
+    .s1_ps           (s1_ps           ),
+    .s1_plv          (s1_plv          ),
+    .s1_mat          (s1_mat          ),
+    .s1_d            (s1_d            ),
+    .s1_v            (s1_v            )
 );
 
 Memory u_Memory(
@@ -422,7 +444,8 @@ Writeback u_Writeback(
 );
 
 tlb #(`TLBNUM) u_tlb(
-    .clk          (clk         ),
+    .clk          (aclk        ),
+    .rstn         (aresetn     ),
     .s0_vppn      (s0_vppn     ),
     .s0_va_bit12  (s0_va_bit12 ),
     .s0_asid      (s0_asid     ),

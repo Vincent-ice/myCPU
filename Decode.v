@@ -357,7 +357,7 @@ wire        csr_re       = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire [31:0] csr_wmask    = {32{inst_csrxchg}} & rj_value | {32{~inst_csrxchg}};
 wire [31:0] csr_wdata    = rkd_value;
 wire [31:0] csr_rdata;
-
+wire [`CSR2TLB_BUS_Wid-1:0] CSR2TLB_BUS;
 wire        csr_we_W;
 wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
@@ -406,9 +406,10 @@ csrReg u_csrReg(
     .counter   (counter   ),
     .counterID (counterID ),
     .CSR2TLB_BUS(CSR2TLB_BUS),
-    .TLB2CSR_BUS({inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,TLB2CSR_BUS_W}),
+    .TLB2CSR_BUS(TLB2CSR_BUS_W),
     .CSR2FE_BUS(CSR2FE_BUS)
 );
+assign CSR2TLB_BUS_D = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_invtlb,invop,CSR2TLB_BUS};
 
     //forward manage
 wire        csr_forward_E = csr_we_E && (csr_addr_E == csr_addr);

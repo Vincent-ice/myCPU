@@ -16,8 +16,6 @@ module Memory (
     input  [`CSR2TLB_BUS_EM_Wid-1:0] CSR2TLB_BUS_E,
     output [`CSR2TLB_BUS_MW_Wid-1:0] CSR2TLB_BUS,
 
-    input  [31:0]               data_sram_rdata,
-
     input                       ex_en,
 
     output                      MW_valid,
@@ -101,6 +99,10 @@ always @(posedge clk) begin
 end
 
 //TLB data
+wire        inst_tlbsrch;
+wire        inst_tlbrd;
+wire        inst_tlbwr;
+wire        inst_tlbfill;
 wire        inst_invtlb;
 wire [ 4:0] invop;
 wire        we;
@@ -121,13 +123,13 @@ wire [ 1:0] w_mat1;
 wire        w_d1;
 wire        w_v1;
 
-assign {inst_tlbsrch,inst_tlbrd,inst_invtlb,invop,we,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
+assign {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_invtlb,invop,we,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
         w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1,r_index} = CSR2TLB_BUS_M;
 //assign {s1_found,s1_index} = TLB2CSR_BUS_M;
 
 assign CSR2TLB_BUS = {inst_invtlb,invop,we,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
                       w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1};
-assign TLB2CSR_BUS = {TLB2CSR_BUS_M,r_e,r_vppn,r_ps,r_asid,r_g,
+assign TLB2CSR_BUS = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,TLB2CSR_BUS_M,r_e,r_vppn,r_ps,r_asid,r_g,
                       r_ppn0,r_plv0,r_mat0,r_d0,r_v0,r_ppn1,r_plv1,r_mat1,r_d1,r_v1};
 
 //data sram read manage
