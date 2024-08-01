@@ -294,6 +294,7 @@ wire [7:0]  ecode_E    = ~E_valid ? 8'h00       :
                          ex_ADEM  ? `ECODE_ADEM : 8'b0;
 wire        esubcode_E = ex_D     ? esubcode_D  :
                          ex_ADEM  ? 1'b1        : 1'b0;
+wire [31:0] badvaddr   = ex_D     ? pc_E        : vaddr;
 
 always @(posedge clk) begin
     if (!rstn) begin
@@ -350,7 +351,7 @@ assign EM_BUS = {data_sram_rdata,   //293:262
                  gr_we_E,           //130
                  dest_E,            //129:125
                  res_from_mem_E,    //124:121
-                 vaddr,             //120:89
+                 badvaddr,             //120:89
                  ex_E,              //88
                  ecode_E,           //87:80
                  esubcode_E,        //79
