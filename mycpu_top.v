@@ -252,7 +252,6 @@ Fetch u_Fetch(
     .new_pc          (new_pc          ),
     .TLBR_en_i       (TLBR_en         ),
     .TLBR_entryPC    (TLBR_entryPC    ),
-    .BTB_stall       (BTB_stall       ),
     .pD_allowin      (pD_allowin      ),
     .FpD_valid       (FpD_valid       ),
     .FpD_BUS         (FpD_BUS         ),

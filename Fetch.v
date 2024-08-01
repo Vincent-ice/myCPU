@@ -17,7 +17,6 @@ module Fetch (
     input    [31:0]                 TLBR_entryPC,
 
     input                           pD_allowin,
-    input                           BTB_stall,
 
     output                          FpD_valid,
     output   [`FpD_BUS_Wid-1:0]     FpD_BUS,
