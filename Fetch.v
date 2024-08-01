@@ -4,8 +4,8 @@ module Fetch (
     input                           rstn,
 
     input    [`predict_BUS_Wid-1:0] predict_BUS,
-    input    [`Branch_BUS_Wid-1:0]  Branch_BUS_D,
-    input    [`Branch_BUS_Wid-1:0]  Branch_BUS_E,
+    input                           predict_error,
+    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
 
     input                           ex_D,
     input                           ex_E, 
@@ -13,6 +13,8 @@ module Fetch (
     input    [31:0]                 ex_entryPC,
     input                           ertn_flush_i,
     input    [31:0]                 new_pc,
+    input                           TLBR_en_i,
+    input    [31:0]                 TLBR_entryPC,
 
     input                           pD_allowin,
     input                           BTB_stall,
@@ -45,12 +47,9 @@ module Fetch (
 );
 
 //Branch bus
-wire br_taken_D;
-wire [31:0] br_target_D;
-assign {br_taken_D,br_target_D} = Branch_BUS_D;
-wire br_taken_E;
-wire [31:0] br_target_E;
-assign {br_taken_E,br_target_E} = Branch_BUS_E;
+wire br_taken_i;
+wire [31:0] br_target_i;
+assign {br_taken_i,br_target_i} = Branch_BUS;
 
 wire        predict_taken  = predict_BUS[32];
 wire [31:0] predict_target = predict_BUS[31:0];
@@ -60,11 +59,12 @@ reg  [31:0] pc_reg;
 reg  [31:0] pc_next;
 wire        pc_en;
 wire [31:0] pc_plus4 = pc_reg + 32'd4;
-wire ex_F;
+reg  ex_F;
 reg  has_ex;
 reg  ex_en;
 reg  ertn_flush;
-wire br_taken = br_taken_D | br_taken_E | predict_taken;
+reg  TLBR_en;
+wire br_taken = br_taken_i | predict_taken;
 reg  [31:0] br_target;
 reg  br_taken_buff;
 reg  [31:0] br_target_buff;
@@ -111,8 +111,7 @@ end
 //branch buff
 always @(*) begin
     case (1'b1)
-        br_taken_D : br_target = br_target_D;
-        br_taken_E : br_target = br_target_E;
+        br_taken_i : br_target = br_target_i;
         predict_taken : br_target = predict_target;
         default    : br_target = 32'b0;
     endcase
@@ -122,11 +121,10 @@ always @(posedge clk) begin
         br_taken_buff <= 1'b0;
         br_target_buff <= 32'b0;
     end
-    else if (!br_taken_buff & predict_taken | br_taken_D | br_taken_E) begin
+    else if (!br_taken_buff & predict_taken | br_taken) begin
         br_taken_buff <= 1'b1;
         case (1'b1)
-            br_taken_D : br_target_buff <= br_target_D;
-            br_taken_E : br_target_buff <= br_target_E;
+            br_taken : br_target_buff <= br_target;
             predict_taken : br_target_buff <= predict_target;
             default    : br_target_buff <= 32'b0;
         endcase
@@ -144,21 +142,23 @@ always @(posedge clk) begin
     else if (ex_D | ex_E) begin
         has_ex <= 1'b1;
     end
-    else if (inst_sram_addr_ok & inst_sram_req & ex_en) begin
+    else if (inst_sram_addr_ok & inst_sram_req & ex_en | predict_error) begin
         has_ex <= 1'b0;
     end
 end
 
-//ex_en buff
+//ex_en & TLBR buff
 always @(posedge clk) begin
     if (!rstn) begin
         ex_en <= 1'b0;
     end
     else if (ex_en_i) begin
         ex_en <= 1'b1;
+        TLBR_en <= TLBR_en_i;
     end
     else if (F_valid_next & F_allowin) begin
         ex_en <= 1'b0;
+        TLBR_en <= 1'b0;
     end
 end
 
@@ -176,9 +176,10 @@ always @(posedge clk) begin
 end
 
 //PC
-assign pc_en   = F_allowin && !ex_F && !send_handshake && !BTB_stall;
+assign pc_en   = F_allowin && !ex_F && !send_handshake;
 always @(*) begin
     case (1'b1)
+        TLBR_en & has_ex: pc_next = TLBR_entryPC;
         ex_en & has_ex: pc_next = ex_entryPC;
         br_taken_buff : pc_next = br_target_buff;
         br_taken      : pc_next = br_target;
@@ -187,7 +188,7 @@ always @(*) begin
         default       : pc_next = pc_plus4;
     endcase
 end
-/* assign pc_next = br_taken_E   ? br_target_E                        :
+/* assign pc_next = br_taken   ? br_target                        :
                  br_taken_D   ? br_target_D                        : 
                  ex_en        ? ex_entryPC                         :
                  predict_taken? predict_target                     :
@@ -254,17 +255,27 @@ assign paddr = da_hit  ? vaddr    :
                          tlb_addr ;
 
 //exception manage
-wire        ex_ADEF    = |pc_next[1:0] && F_valid_next;
+wire        ex_ADEF    = |pc_next[1:0];
 wire        ex_TLBR    = ~da_hit & ~dmw_hit & ~s0_found;
 wire        ex_PIF     = ~da_hit & ~dmw_hit & s0_found & ~s0_v;
 wire        ex_PPI     = ~da_hit & ~dmw_hit & (csr_CRMD_PLV > s0_plv);
-
-assign      ex_F       = ex_ADEF || ex_TLBR || ex_PIF || ex_PPI;
-wire [ 7:0] ecode_F    = ex_ADEF ? `ECODE_ADEF :
-                         ex_TLBR ? `ECODE_TLBR :
-                         ex_PIF  ? `ECODE_PIF  :
-                         ex_PPI  ? `ECODE_PPI  : 8'h00;
-wire        esubcode_F = `ESUBCODE_ADEF;
+reg  [ 7:0] ecode_F;
+reg         esubcode_F;
+always @(posedge clk) begin
+    if (!predict_error && F_valid_next && F_allowin) begin
+        ex_F    <= (ex_ADEF || ex_TLBR || ex_PIF || ex_PPI);
+        ecode_F <= ex_ADEF ? `ECODE_ADEF :
+               ex_TLBR ? `ECODE_TLBR :
+               ex_PIF  ? `ECODE_PIF  :
+               ex_PPI  ? `ECODE_PPI  : 8'h00;
+        esubcode_F <= `ESUBCODE_ADEF;
+    end
+    else begin
+        ex_F <= 1'b0;
+        ecode_F <= 8'h00;
+        esubcode_F <= 1'b0;
+    end
+end
 
 //inst sram manage
 reg  [31:0] inst_sram_rdata_buff;
@@ -287,7 +298,7 @@ end
 assign FpD_BUS = {pc_reg,       //74:43
                  inst_sram_rdata_buff,//42:11
                  pc_en,         //10
-                 ex_F,          //9
+                 ex_F & !predict_error,//9
                  ecode_F,       //8:1
                  esubcode_F};   //0
 

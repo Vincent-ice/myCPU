@@ -28,6 +28,7 @@ module csrReg (
 
     output [31:0]               new_pc,
     output [31:0]               ex_entryPC,
+    output [31:0]               TLBR_entryPC,
 
     output [63:0]               counter,
     output [31:0]               counterID,
@@ -236,14 +237,18 @@ always @(posedge clk ) begin
     else if (ex_en) begin
         `CSR_CRMD_PLV <=  2'b0;
         `CSR_CRMD_IE  <=  1'b0;
+        if (ecode == `ECODE_TLBR) begin
+            `CSR_CRMD_DA  <=  1'b1;
+            `CSR_CRMD_PG  <=  1'b0;
+        end
     end
     else if (ertn_flush) begin
         `CSR_CRMD_PLV <= `CSR_PRMD_PPLV;
         `CSR_CRMD_IE  <= `CSR_PRMD_PIE ;
-    end 
-    else if (inst_tlbfill) begin
-        `CSR_CRMD_DA  <= 1'b1;
-        `CSR_CRMD_PG  <= 1'b0;
+        if (`CSR_ESTAT_ECODE == `ECODE_TLBR) begin
+            `CSR_CRMD_DA  <= 1'b0;
+            `CSR_CRMD_PG  <= 1'b1;
+        end
     end
     else if (CRMD_we) begin
         csr_CRMD[8:0] <= csr_wdata[8:0] & csr_wmask[8:0] | ~csr_wmask[8:0] & csr_CRMD[8:0];
@@ -280,7 +285,8 @@ always @(posedge clk ) begin
         csr_ECFG <= 32'b0;
     end
     else if (ECFG_we) begin
-        csr_ECFG[12:0] <= csr_wdata[12:0] & csr_wmask[12:0] | ~csr_wmask[12:0] & csr_ECFG[12:0];
+        csr_ECFG[9:0] <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & csr_ECFG[9:0];
+        csr_ECFG[12:11] <= csr_wdata[12:11] & csr_wmask[12:11] | ~csr_wmask[12:11] & csr_ECFG[12:11];
     end
 end
 
@@ -348,10 +354,10 @@ assign new_pc = in_ex &&
                  `CSR_ESTAT_ECODE == `ECODE_INT)  ? csr_ERA + 32'd4 : csr_ERA;
 
 //BADV
-wire va_error = (ecode == `ECODE_ADEM) || (ecode == `ECODE_ALE) ||
+wire va_error = (ecode == `ECODE_ALE ) ||
                 (ecode == `ECODE_PIL ) || (ecode == `ECODE_PIS) ||
                 (ecode == `ECODE_PIF ) || (ecode == `ECODE_PME) ||
-                (ecode == `ECODE_PPI );
+                (ecode == `ECODE_PPI ) || (ecode == `ECODE_TLBR);
 always @(posedge clk ) begin
     if (!rstn) begin
         csr_BADV <= 32'b0;
@@ -483,7 +489,7 @@ end
 //LLBCTL
 always @(posedge clk ) begin
     if (!rstn) begin
-        csr_LLBCTL[31:1] <= 31'b0;
+        csr_LLBCTL <= 32'b0;
         LLbit <= 1'b0;
     end 
     else if (ecode == `ECODE_ERTN) begin
@@ -499,6 +505,8 @@ always @(posedge clk ) begin
         if (csr_wdata[1] == 1'b1) begin
             LLbit <= 1'b0;
         end
+    end else begin
+        csr_LLBCTL[0] <= LLbit;
     end
 end
 
@@ -546,10 +554,14 @@ always @(posedge clk) begin
             `CSR_TLBIDX_NE    <= 1'b1;
     end
     else if(inst_tlbrd) begin
-        `CSR_TLBIDX_NE    <= ~r_e;
-    end
-    else if(inst_tlbrd && r_e) begin
-        `CSR_TLBIDX_PS    <= r_ps;
+        if (r_e) begin
+            `CSR_TLBIDX_NE    <= 1'b0;
+            `CSR_TLBIDX_PS    <= r_ps;
+        end 
+        else begin
+            `CSR_TLBIDX_NE    <= 1'b1;
+            `CSR_TLBIDX_PS    <= 6'b0;
+        end
     end
     else if(TLBIDX_we)begin
         csr_TLBIDX <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBIDX) & 32'hbf00_ffff;
@@ -559,11 +571,16 @@ end
 
 // TLBEHI
 always @(posedge clk) begin
-    if(!rstn || inst_tlbrd && !r_e) begin
+    if(!rstn) begin
         csr_TLBEHI <= 32'b0;
     end
-    else if(inst_tlbrd && r_e) begin
-        `CSR_TLBEHI_VPPN <= r_vppn;
+    else if(inst_tlbrd) begin
+        if (r_e) begin
+            `CSR_TLBEHI_VPPN <= r_vppn;
+        end
+        else begin
+            csr_TLBEHI <= 32'b0;
+        end
     end
     else if (~ertn_flush & (ecode == `ECODE_TLBR || 
                             ecode == `ECODE_PIL  || 
@@ -585,13 +602,18 @@ always @(posedge clk) begin
     if(!rstn) begin
         csr_TLBELO0 <= 32'b0;
     end
-    else if(inst_tlbrd && r_e) begin
-        `CSR_TLBELO0_V   <= r_v0;
-        `CSR_TLBELO0_D   <= r_d0;
-        `CSR_TLBELO0_PLV <= r_plv0;
-        `CSR_TLBELO0_MAT <= r_mat0;
-        `CSR_TLBELO0_G   <= r_g;
-        `CSR_TLBELO0_PPN <= r_ppn0;
+    else if(inst_tlbrd) begin
+        if(r_e) begin
+            `CSR_TLBELO0_V   <= r_v0;
+            `CSR_TLBELO0_D   <= r_d0;
+            `CSR_TLBELO0_PLV <= r_plv0;
+            `CSR_TLBELO0_MAT <= r_mat0;
+            `CSR_TLBELO0_G   <= r_g;
+            `CSR_TLBELO0_PPN <= r_ppn0;
+        end
+        else begin
+            csr_TLBELO0 <= 32'b0;
+        end
     end
     else if(TLBELO0_we) begin
         csr_TLBELO0 <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBELO0) & 32'hffff_ff7f;   
@@ -604,13 +626,18 @@ always @(posedge clk) begin
     if(!rstn) begin
         csr_TLBELO1 <= 32'b0;
     end
-    else if(inst_tlbrd && r_e) begin
-        `CSR_TLBELO1_V   <= r_v1;
-        `CSR_TLBELO1_D   <= r_d1;
-        `CSR_TLBELO1_PLV <= r_plv1;
-        `CSR_TLBELO1_MAT <= r_mat1;
-        `CSR_TLBELO1_G   <= r_g;
-        `CSR_TLBELO1_PPN <= r_ppn1;
+    else if(inst_tlbrd) begin
+        if(r_e) begin
+            `CSR_TLBELO1_V   <= r_v1;
+            `CSR_TLBELO1_D   <= r_d1;
+            `CSR_TLBELO1_PLV <= r_plv1;
+            `CSR_TLBELO1_MAT <= r_mat1;
+            `CSR_TLBELO1_G   <= r_g;
+            `CSR_TLBELO1_PPN <= r_ppn1;
+        end
+        else begin
+            csr_TLBELO1 <= 32'b0;
+        end
     end
     else if(TLBELO1_we) begin
         csr_TLBELO1 <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBELO1) & 32'hffff_ff7f;
@@ -623,8 +650,13 @@ always @(posedge clk) begin
     if(!rstn) begin
         csr_ASID <= 32'h000a_0000;
     end
-    else if(inst_tlbrd && r_e) begin
-        `CSR_ASID_ASID <= r_asid;
+    else if(inst_tlbrd) begin
+        if (r_e) begin
+            `CSR_ASID_ASID <= r_asid;
+        end
+        else begin
+            `CSR_ASID_ASID <= 'b0;
+        end
     end
     else if(ASID_we)begin
         `CSR_ASID_ASID  <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & `CSR_ASID_ASID;
@@ -663,13 +695,13 @@ assign csr_PGD_rvalue = {csr_BADV[31] ? `CSR_PGDL_BASE : `CSR_PGDH_BASE , 12'b0}
 // TLBRENTRY
 always @(posedge clk ) begin
     if(!rstn)begin
-        csr_TLBRENTRY <= 232'b0;
+        csr_TLBRENTRY <= 32'b0;
     end 
     else if(TLBRENTRY_we) begin
         `CSR_TLBRENTRY_PA <= csr_wdata[31:6] & csr_wmask[31:6] | ~csr_wmask[31:6] & `CSR_TLBRENTRY_PA; 
     end
 end
-
+assign TLBR_entryPC = csr_TLBRENTRY;
 // DMW0
 always @ (posedge clk) begin
     if (!rstn) begin

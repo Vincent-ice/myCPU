@@ -95,12 +95,12 @@ wire [TLBNUM-1:0] match0,match1            ;
 genvar i;
 generate
     for (i = 0; i < TLBNUM; i = i + 1) begin : match_gen
-        assign match0[i] = (s0_vppn[18:10] == tlb_vppn[i][18:10])
-                          && (tlb_ps4MB[i] || s0_vppn[9:0] == tlb_vppn[i][9:0])
+        assign match0[i] = (s0_vppn[18:9] == tlb_vppn[i][18:9])
+                          && (tlb_ps4MB[i] || s0_vppn[8:0] == tlb_vppn[i][8:0])
                           && ((s0_asid == tlb_asid[i]) || tlb_g[i]);
         
-        assign match1[i] = (s1_vppn[18:10] == tlb_vppn[i][18:10])
-                          && (tlb_ps4MB[i] || s1_vppn[9:0] == tlb_vppn[i][9:0])
+        assign match1[i] = (s1_vppn[18:9] == tlb_vppn[i][18:9])
+                          && (tlb_ps4MB[i] || s1_vppn[8:0] == tlb_vppn[i][8:0])
                           && ((s1_asid == tlb_asid[i]) || tlb_g[i]);
         
     end
