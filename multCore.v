@@ -3,7 +3,7 @@ module multCore (
     input wire rstn,
     input wire [31:0] op1,op2,
     input wire sign_en, //1为有符号
-    output wire [63:0] out
+    output reg [63:0] out
 );
 wire [65:0] op1_ext = sign_en ? (op1[31] ? {34'h3_ffff_ffff,op1} : {34'b0,op1})
                                    : {34'b0,op1};
@@ -50,25 +50,14 @@ end
 
 
 /*--------------------------------------*/
-reg [65:0] wallace_buf [5:0];
-always @(posedge clk) begin
-    if (!rstn) begin
-        wallace_buf[0] <= 66'b0;
-        wallace_buf[1] <= 66'b0;
-        wallace_buf[2] <= 66'b0;
-        wallace_buf[3] <= 66'b0;
-        wallace_buf[4] <= 66'b0;
-        wallace_buf[5] <= 66'b0;
-    end
-    else begin
-        wallace_buf[0] <= wallace3_buf[0];
-        wallace_buf[1] <= wallace3_buf[1];
-        wallace_buf[2] <= wallace3_buf[2];
-        wallace_buf[3] <= wallace3_buf[3];
-        wallace_buf[4] <= wallace2_buf[6];
-        wallace_buf[5] <= wallace2_buf[7];
-    end
-end
+wire [65:0] wallace_buf [5:0];
+
+assign wallace_buf[0] = wallace3_buf[0];
+assign wallace_buf[1] = wallace3_buf[1];
+assign wallace_buf[2] = wallace3_buf[2];
+assign wallace_buf[3] = wallace3_buf[3];
+assign wallace_buf[4] = wallace2_buf[6];
+assign wallace_buf[5] = wallace2_buf[7];
 
 wire [65:0] wallace4_buf [3:0];
 begin:wallace4
@@ -87,7 +76,10 @@ wire [65:0] out_buf;
 begin:adder
     assign out_buf = wallace6_buf[0] + wallace6_buf[1];
 end
-assign out = out_buf[63:0];
+always @(posedge clk) begin
+    out <= out_buf[63:0];
+end
+
 endmodule
 
 module compressor32 #(parameter WIDTH = 8)(

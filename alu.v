@@ -165,18 +165,18 @@ always @(posedge clk) begin
 end
 
   // div result history
-reg [31:0] op1_history [7:0];
-reg [31:0] op2_history [7:0];
-reg [31:0] rem_history [7:0];
-reg [31:0] quo_history [7:0];
-reg        sign_history[7:0];
-reg [ 3:0] tag;
+reg [31:0] op1_history [1:0];
+reg [31:0] op2_history [1:0];
+reg [31:0] rem_history [1:0];
+reg [31:0] quo_history [1:0];
+reg        sign_history[1:0];
+reg        tag;
 
 integer n = 0;
 always @(posedge clk) begin
   if (!rstn) begin
-    tag <= 4'b0;
-    for (n = 0;n < 8;n = n + 1) begin
+    tag <= 1'b0;
+    for (n = 0;n < 2;n = n + 1) begin
       op1_history[n] <= 32'b0;
       op2_history[n] <= 32'b0;
       rem_history[n] <= 32'b0;
@@ -185,7 +185,7 @@ always @(posedge clk) begin
     end
   end
   else if (div_complete) begin
-    tag              <= tag + 1;
+    tag              <= !tag;
     op1_history[tag] <= alu_src1;
     op2_history[tag] <= alu_src2;
     sign_history[tag]<= div_sign;
@@ -194,10 +194,10 @@ always @(posedge clk) begin
   end
 end
 
-wire [7:0] find_buff ;
+wire [1:0] find_buff ;
 generate
   genvar i;
-  for (i = 0; i < 8; i = i + 1) begin
+  for (i = 0; i < 2; i = i + 1) begin
     assign find_buff[i] = div_go & (op1_history[i] == alu_src1) & (op2_history[i] == alu_src2);
   end
 endgenerate
@@ -209,12 +209,6 @@ always @(*) begin
   case (1'b1)
     find_buff[0] : begin find_rem = rem_history[0]; find_quo = quo_history[0]; end
     find_buff[1] : begin find_rem = rem_history[1]; find_quo = quo_history[1]; end
-    find_buff[2] : begin find_rem = rem_history[2]; find_quo = quo_history[2]; end
-    find_buff[3] : begin find_rem = rem_history[3]; find_quo = quo_history[3]; end
-    find_buff[4] : begin find_rem = rem_history[4]; find_quo = quo_history[4]; end
-    find_buff[5] : begin find_rem = rem_history[5]; find_quo = quo_history[5]; end
-    find_buff[6] : begin find_rem = rem_history[6]; find_quo = quo_history[6]; end
-    find_buff[7] : begin find_rem = rem_history[7]; find_quo = quo_history[7]; end
     default      : begin find_rem = 32'b0         ; find_quo = 32'b0         ; end
   endcase
 end

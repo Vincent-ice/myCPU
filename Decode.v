@@ -172,6 +172,7 @@ wire inst_tlbwr   = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] &&
 wire inst_tlbfill = op_31_26_d[6'h01] && op_25_22_d[4'h9] && op_21_20_d[2'h0] && op_19_15_d[5'h10] && op_14_10_d[5'h0d] && (rj==5'b00) && (rd==5'b00);
 wire inst_invtlb  = op_31_26_d[6'h01] & op_25_22_d[4'h9] & op_21_20_d[2'h0] & op_19_15_d[5'h13] & (invop==5'h00 | invop==5'h01 | invop==5'h02 | invop==5'h03 | invop==5'h04 | invop==5'h05 | invop==5'h06);
 
+wire inst_cacop   = op_31_26_d[6'h01] & op_25_22_d[4'h8];
 /* don't forget add the inst to the wire 'unknownInst' at last */
 
 //alu_op manage
@@ -255,7 +256,7 @@ wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
 wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & D_valid & 
                            ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu& ~inst_break & ~inst_syscall & 
-                           ~inst_tlbsrch & ~inst_tlbrd & ~inst_tlbwr & ~inst_tlbfill & ~inst_invtlb;
+                           ~inst_tlbsrch & ~inst_tlbrd & ~inst_tlbwr & ~inst_tlbfill & ~inst_invtlb & ~inst_cacop;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
@@ -350,7 +351,7 @@ wire        csr_we_W;
 wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
-wire [13:0] csr_raddr_forward;
+reg  [13:0] csr_raddr_forward;
 wire [31:0] csr_rdata_forward;
 wire        ex_en_W;
 wire [ 7:0] ecode_W;
@@ -407,13 +408,26 @@ assign CSR2TLB_BUS_D = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_inv
 wire        csr_forward_E = csr_we_E && (csr_addr_E == csr_addr);
 wire        csr_forward_M = csr_we_M && (csr_addr_M == csr_addr);
 wire        csr_forward_W = csr_we_W && (csr_addr_W == csr_addr);
-assign      csr_raddr_forward = ({14{csr_forward_E}} & csr_addr_E) | ({14{csr_forward_M}} & csr_addr_M);
-wire [31:0] csr_wmask_forward = ({32{csr_forward_E}} & csr_wmask_E) | ({32{csr_forward_M}} & csr_wmask_M);
-wire [31:0] csr_wdata_forward = ({32{csr_forward_E}} & csr_wdata_E) | ({32{csr_forward_M}} & csr_wdata_M);
-wire [31:0] csr_value;
-assign csr_value =  csr_forward_E | csr_forward_M ? (csr_wdata_forward & csr_wmask_forward | ~csr_wmask_forward & csr_rdata_forward) : 
-                    csr_forward_W                 ? (csr_wdata_W & csr_wmask_W | ~csr_wmask_W & csr_wdata_forward)        : csr_rdata;
-assign new_pc = csr_value;
+always @(*) begin
+    case (1'b1)
+        csr_forward_E : csr_raddr_forward = csr_addr_E;
+        csr_forward_M : csr_raddr_forward = csr_addr_M;
+        csr_forward_W : csr_raddr_forward = csr_addr_W;
+        default       : csr_raddr_forward = 14'b0;
+    endcase
+end
+
+reg  [31:0] csr_value;
+always @(*) begin
+    case (1'b1)
+        csr_forward_E : csr_value = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
+        csr_forward_M : csr_value = (csr_wdata_M & csr_wmask_M) | (~csr_wmask_M & csr_rdata_forward);
+        csr_forward_W : csr_value = (csr_wdata_W & csr_wmask_W) | (~csr_wmask_W & csr_rdata_forward);
+        default       : csr_value = csr_rdata;
+    endcase
+end
+
+assign new_pc = era_pc;
 
 //branch manage
 wire [31:0] br_base;
@@ -463,7 +477,7 @@ wire       unknownInst = !{|{inst_add_w,inst_sub_w,inst_slt,inst_sltu,inst_nor,i
                              inst_sltui,inst_addi_w,inst_andi,inst_ori,inst_xori,inst_pcaddu12i,inst_jirl,
                              inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
                              inst_ld_b,inst_ld_h,inst_ld_bu,inst_ld_hu,inst_ld_w,inst_st_b,inst_st_h,inst_st_w,
-                             inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,
+                             inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,inst_cacop,
                              inst_rdcntid,inst_rdcntvl_w,inst_rdcntvh_w,inst_tlbfill,inst_tlbwr,inst_tlbrd,inst_tlbsrch,inst_invtlb}};
 assign     ex_D    = D_ready_go && !predict_error & (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :

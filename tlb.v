@@ -1,6 +1,6 @@
 module tlb
 #(
-    parameter TLBNUM = 16               //only can support 16 TLB entries, index output need to be changed when TLBNUM more than 16
+    parameter TLBNUM = 8              //only can support 16 TLB entries, index output need to be changed when TLBNUM more than 16
 )
 (
     input  wire                      clk,

@@ -10,10 +10,10 @@ module csrReg (
     input  [13:0]               csr_waddr,
     input  [31:0]               csr_wmask, 
     input  [31:0]               csr_wdata,
-    output [31:0]               csr_rdata,
+    output reg [31:0]           csr_rdata,
 
     input  [13:0]               csr_raddr_forward,
-    output [31:0]               csr_rdata_forward,
+    output reg [31:0]           csr_rdata_forward,
 
     input                       ex_en,
     input  [ 7:0]               ecode,
@@ -167,67 +167,76 @@ assign int_ecode = /* int[12] ? 8'd76 :
 
 //CSR rdata
 wire [31:0] csr_PGD_rvalue;
-assign csr_rdata = csr_raddr == `CSR_CRMD      ? csr_CRMD      :
-                   csr_raddr == `CSR_PRMD      ? csr_PRMD      :
-                   csr_raddr == `CSR_EUEN      ? csr_EUEN      :
-                   csr_raddr == `CSR_ECFG      ? csr_ECFG      :
-                   csr_raddr == `CSR_ESTAT     ? csr_ESTAT     :
-                   csr_raddr == `CSR_ERA       ? csr_ERA       :
-                   csr_raddr == `CSR_BADV      ? csr_BADV      :
-                   csr_raddr == `CSR_EENTRY    ? csr_EENTRY    :
-                   csr_raddr == `CSR_TLBIDX    ? csr_TLBIDX    :
-                   csr_raddr == `CSR_TLBEHI    ? csr_TLBEHI    :
-                   csr_raddr == `CSR_TLBELO0   ? csr_TLBELO0   :
-                   csr_raddr == `CSR_TLBELO1   ? csr_TLBELO1   :
-                   csr_raddr == `CSR_ASID      ? csr_ASID      :
-                   csr_raddr == `CSR_PGDL      ? csr_PGDL      :
-                   csr_raddr == `CSR_PGDH      ? csr_PGDH      :
-                   csr_raddr == `CSR_PGD       ? csr_PGD_rvalue:
-                   csr_raddr == `CSR_CPUID     ? csr_CPUID     :
-                   csr_raddr == `CSR_SAVE0     ? csr_SAVE0     :
-                   csr_raddr == `CSR_SAVE1     ? csr_SAVE1     :
-                   csr_raddr == `CSR_SAVE2     ? csr_SAVE2     :
-                   csr_raddr == `CSR_SAVE3     ? csr_SAVE3     :
-                   csr_raddr == `CSR_TID       ? csr_TID       :
-                   csr_raddr == `CSR_TCFG      ? csr_TCFG      :
-                   csr_raddr == `CSR_TVAL      ? csr_TVAL      :
-                   csr_raddr == `CSR_TICLR     ? 32'h0     :
-                   csr_raddr == `CSR_LLBCTL    ? {csr_LLBCTL[31:1],LLbit} :
-                   csr_raddr == `CSR_TLBRENTRY ? csr_TLBRENTRY :
-                   csr_raddr == `CSR_CTAG      ? csr_CTAG      :
-                   csr_raddr == `CSR_DMW0      ? csr_DMW0      :
-                   csr_raddr == `CSR_DMW1      ? csr_DMW1      : 32'b0;
-
-assign csr_rdata_forward = csr_raddr_forward == `CSR_CRMD      ? csr_CRMD      :
-                           csr_raddr_forward == `CSR_PRMD      ? csr_PRMD      :
-                           csr_raddr_forward == `CSR_EUEN      ? csr_EUEN      :
-                           csr_raddr_forward == `CSR_ECFG      ? csr_ECFG      :
-                           csr_raddr_forward == `CSR_ESTAT     ? csr_ESTAT     :
-                           csr_raddr_forward == `CSR_ERA       ? csr_ERA       :
-                           csr_raddr_forward == `CSR_BADV      ? csr_BADV      :
-                           csr_raddr_forward == `CSR_EENTRY    ? csr_EENTRY    :
-                           csr_raddr_forward == `CSR_TLBIDX    ? csr_TLBIDX    :
-                           csr_raddr_forward == `CSR_TLBEHI    ? csr_TLBEHI    :
-                           csr_raddr_forward == `CSR_TLBELO0   ? csr_TLBELO0   :
-                           csr_raddr_forward == `CSR_TLBELO1   ? csr_TLBELO1   :
-                           csr_raddr_forward == `CSR_ASID      ? csr_ASID      :
-                           csr_raddr_forward == `CSR_PGDL      ? csr_PGDL      :
-                           csr_raddr_forward == `CSR_PGDH      ? csr_PGDH      :
-                           csr_raddr_forward == `CSR_PGD       ? csr_PGD_rvalue:
-                           csr_raddr_forward == `CSR_CPUID     ? csr_CPUID     :
-                           csr_raddr_forward == `CSR_SAVE0     ? csr_SAVE0     :
-                           csr_raddr_forward == `CSR_SAVE1     ? csr_SAVE1     :
-                           csr_raddr_forward == `CSR_SAVE2     ? csr_SAVE2     :
-                           csr_raddr_forward == `CSR_SAVE3     ? csr_SAVE3     :
-                           csr_raddr_forward == `CSR_TID       ? csr_TID       :
-                           csr_raddr_forward == `CSR_TCFG      ? csr_TCFG      :
-                           csr_raddr_forward == `CSR_TVAL      ? csr_TVAL      :
-                           csr_raddr_forward == `CSR_TICLR     ? 32'h0     :
-                           csr_raddr_forward == `CSR_LLBCTL    ? {csr_LLBCTL[31:1],LLbit} :
-                           csr_raddr_forward == `CSR_TLBRENTRY ? csr_TLBRENTRY :
-                           csr_raddr_forward == `CSR_CTAG      ? csr_CTAG      :
-                           csr_raddr_forward == `CSR_DMW0      ? csr_DMW0      :
-                           csr_raddr_forward == `CSR_DMW1      ? csr_DMW1      : 32'b0;
+always @(*) begin
+    case (csr_raddr)
+        `CSR_CRMD    : csr_rdata = csr_CRMD      ;
+        `CSR_PRMD    : csr_rdata = csr_PRMD      ;
+        `CSR_EUEN    : csr_rdata = csr_EUEN      ;
+        `CSR_ECFG    : csr_rdata = csr_ECFG      ;
+        `CSR_ESTAT   : csr_rdata = csr_ESTAT     ;
+        `CSR_ERA     : csr_rdata = csr_ERA       ;
+        `CSR_BADV    : csr_rdata = csr_BADV      ;
+        `CSR_EENTRY  : csr_rdata = csr_EENTRY    ;
+        `CSR_TLBIDX  : csr_rdata = csr_TLBIDX    ;
+        `CSR_TLBEHI  : csr_rdata = csr_TLBEHI    ;
+        `CSR_TLBELO0 : csr_rdata = csr_TLBELO0   ;
+        `CSR_TLBELO1 : csr_rdata = csr_TLBELO1   ;
+        `CSR_ASID    : csr_rdata = csr_ASID      ;
+        `CSR_PGDL    : csr_rdata = csr_PGDL      ;
+        `CSR_PGDH    : csr_rdata = csr_PGDH      ;
+        `CSR_PGD     : csr_rdata = csr_PGD_rvalue;
+        `CSR_CPUID   : csr_rdata = csr_CPUID     ;
+        `CSR_SAVE0   : csr_rdata = csr_SAVE0     ;
+        `CSR_SAVE1   : csr_rdata = csr_SAVE1     ;
+        `CSR_SAVE2   : csr_rdata = csr_SAVE2     ;
+        `CSR_SAVE3   : csr_rdata = csr_SAVE3     ;
+        `CSR_TID     : csr_rdata = csr_TID       ;
+        `CSR_TCFG    : csr_rdata = csr_TCFG      ;
+        `CSR_TVAL    : csr_rdata = csr_TVAL      ;
+        `CSR_TICLR   : csr_rdata = 32'h0         ;
+        `CSR_LLBCTL  : csr_rdata = {csr_LLBCTL[31:1],LLbit};
+        `CSR_TLBRENTRY: csr_rdata = csr_TLBRENTRY;
+        `CSR_CTAG    : csr_rdata = csr_CTAG      ;
+        `CSR_DMW0    : csr_rdata = csr_DMW0      ;
+        `CSR_DMW1    : csr_rdata = csr_DMW1      ;
+        default      : csr_rdata = 32'b0         ;
+    endcase
+end
+always @(*) begin
+    case (csr_raddr_forward)
+        `CSR_CRMD    : csr_rdata_forward = csr_CRMD      ;
+        `CSR_PRMD    : csr_rdata_forward = csr_PRMD      ;
+        `CSR_EUEN    : csr_rdata_forward = csr_EUEN      ;
+        `CSR_ECFG    : csr_rdata_forward = csr_ECFG      ;
+        `CSR_ESTAT   : csr_rdata_forward = csr_ESTAT     ;
+        `CSR_ERA     : csr_rdata_forward = csr_ERA       ;
+        `CSR_BADV    : csr_rdata_forward = csr_BADV      ;
+        `CSR_EENTRY  : csr_rdata_forward = csr_EENTRY    ;
+        `CSR_TLBIDX  : csr_rdata_forward = csr_TLBIDX    ;
+        `CSR_TLBEHI  : csr_rdata_forward = csr_TLBEHI    ;
+        `CSR_TLBELO0 : csr_rdata_forward = csr_TLBELO0   ;
+        `CSR_TLBELO1 : csr_rdata_forward = csr_TLBELO1   ;
+        `CSR_ASID    : csr_rdata_forward = csr_ASID      ;
+        `CSR_PGDL    : csr_rdata_forward = csr_PGDL      ;
+        `CSR_PGDH    : csr_rdata_forward = csr_PGDH      ;
+        `CSR_PGD     : csr_rdata_forward = csr_PGD_rvalue;
+        `CSR_CPUID   : csr_rdata_forward = csr_CPUID     ;
+        `CSR_SAVE0   : csr_rdata_forward = csr_SAVE0     ;
+        `CSR_SAVE1   : csr_rdata_forward = csr_SAVE1     ;
+        `CSR_SAVE2   : csr_rdata_forward = csr_SAVE2     ;
+        `CSR_SAVE3   : csr_rdata_forward = csr_SAVE3     ;
+        `CSR_TID     : csr_rdata_forward = csr_TID       ;
+        `CSR_TCFG    : csr_rdata_forward = csr_TCFG      ;
+        `CSR_TVAL    : csr_rdata_forward = csr_TVAL      ;
+        `CSR_TICLR   : csr_rdata_forward = 32'h0         ;
+        `CSR_LLBCTL  : csr_rdata_forward = {csr_LLBCTL[31:1],LLbit};
+        `CSR_TLBRENTRY: csr_rdata_forward = csr_TLBRENTRY;
+        `CSR_CTAG    : csr_rdata_forward = csr_CTAG      ;
+        `CSR_DMW0    : csr_rdata_forward = csr_DMW0      ;
+        `CSR_DMW1    : csr_rdata_forward = csr_DMW1      ;
+        default      : csr_rdata_forward = 32'b0         ;
+    endcase
+end
 
 //CRMD
 always @(posedge clk ) begin
