@@ -191,20 +191,19 @@ wire        da_hit;
 wire        dmw0_hit;
 wire        dmw1_hit;
 wire        dmw_hit = dmw0_hit || dmw1_hit;
-// TLB 
-wire        req;
-assign      vaddr = alu_result_E;
+// TLB search
+assign vaddr = alu_result_E;
 wire [31:0] paddr;
 wire [21:0] offset = vaddr[21:0];
 
 assign s1_vppn     = inst_invtlb  ? alu_src2_E[31:13] :
                      inst_tlbsrch ? w_vppn            : 
-                     req          ? vaddr[31:13]      : 'b0;
+                     vaddr[31:13];
 assign s1_va_bit12 = inst_invtlb  ? alu_src2_E[12]    :
                      inst_tlbsrch ? 1'b0              :
-                     req          ? vaddr[12]         : 'b0;
+                     vaddr[12];
 assign s1_asid     = inst_invtlb  ? alu_src1_E[9:0]   :
-                     req          ? csr_ASID_ASID     : 'b0;
+                     csr_ASID_ASID;
 
 
 wire [31:0] tlb_addr = (s1_ps == 6'd12) ? {s1_ppn[19:0], offset[11:0]} :
@@ -224,24 +223,20 @@ wire [31:0] dmw_addr = {32{dmw0_hit}} & {csr_DMW0_PSEG, vaddr[28:0]} |
 // PADDR
 assign paddr = da_hit  ? vaddr    :
                dmw_hit ? dmw_addr :
-               req     ? tlb_addr : 'b0;
+                         tlb_addr ;
 
 //data sram manage
-assign      req = E_valid && !ex_E && !send_handshake && (|mem_we_E || |res_from_mem_E);
+wire        req = E_valid && !ex_E && !send_handshake && (|mem_we_E || |res_from_mem_E);
 reg         req_reg;
-reg         paddr_reg;
 always @(posedge clk) begin
     if (!rstn) begin
         req_reg <= 1'b0;
-        paddr_reg <= 32'b0;
     end
     else if (req & !data_sram_addr_ok) begin
         req_reg <= 1'b1;
-        paddr_reg <= paddr;
     end 
     else if (data_sram_addr_ok) begin
         req_reg <= 1'b0;
-        paddr_reg <= 32'b0;
     end
 end
 assign data_sram_req = (req | req_reg);
@@ -264,7 +259,7 @@ always @(*) begin
     endcase
 end
 
-assign data_sram_addr  = paddr | paddr_reg;
+assign data_sram_addr  = paddr;
 
 always @(*) begin
     case (mem_we_E)
@@ -279,12 +274,12 @@ assign data_sram_wr = (|mem_we_E);
 //exception manage
 wire        ex_ALE     = ((mem_we_E[3] | res_from_mem_E[3])&(|vaddr[1:0])) ||
                          ((mem_we_E[1] | res_from_mem_E[1])&( vaddr[0]  ));
-wire        ex_TLBR    = req & ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & ~s1_found;
-wire        ex_PIL     = req & ~da_hit & ~dmw_hit & res_from_mem_E & s1_found & ~s1_v;
-wire        ex_PIS     = req & ~da_hit & ~dmw_hit & mem_we_E & s1_found & ~s1_v;
-wire        ex_PPI     = req & ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & s1_found & s1_v & csr_CRMD_PLV == 2'b11 && s1_plv == 2'b00;            
-wire        ex_PME     = req & ~da_hit & ~dmw_hit & mem_we_E & s1_found & s1_v & ~ex_PPI & ~s1_d;
-wire        ex_ADEM    = req & ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & csr_CRMD_PLV == 2'b11 & vaddr[31];
+wire        ex_TLBR    = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & ~s1_found;
+wire        ex_PIL     = ~da_hit & ~dmw_hit & res_from_mem_E & s1_found & ~s1_v;
+wire        ex_PIS     = ~da_hit & ~dmw_hit & mem_we_E & s1_found & ~s1_v;
+wire        ex_PPI     = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & s1_found & s1_v & csr_CRMD_PLV == 2'b11 && s1_plv == 2'b00;            
+wire        ex_PME     = ~da_hit & ~dmw_hit & mem_we_E & s1_found & s1_v & ~ex_PPI & ~s1_d;
+wire        ex_ADEM    = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & csr_CRMD_PLV == 2'b11 & vaddr[31];
 
 assign      ex_E       = E_valid && (ex_D | ex_ALE | ex_TLBR | ex_PIL | ex_PIS | ex_PME | ex_PPI | ex_ADEM);
 wire [7:0]  ecode_E    = ~E_valid ? 8'h00       :
