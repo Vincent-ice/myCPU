@@ -46,7 +46,7 @@ module mycpu_top(
     output wire        bready ,
     // trace debug interface
     output wire [31:0] debug_wb_pc,
-    output wire [ 3:0] debug_wb_rf_wen,
+    output wire [ 3:0] debug_wb_rf_we,
     output wire [ 4:0] debug_wb_rf_wnum,
     output wire [31:0] debug_wb_rf_wdata
 );
@@ -58,13 +58,14 @@ wire [`pDD_BUS_Wid-1:0]         pDD_BUS;
 wire                            DE_valid;
 wire [`DE_BUS_Wid-1:0]          DE_BUS;
 wire [`predict_BUS_Wid-1:0]     predict_BUS;
-wire [`Branch_BUS_Wid-1:0]      Branch_BUS_D;
-wire [`Branch_BUS_Wid-1:0]      Branch_BUS_E;
+wire [`Branch_BUS_Wid-1:0]      Branch_BUS;
 wire                            EM_valid;
 wire [`EM_BUS_Wid-1:0]          EM_BUS;
 wire                            MW_valid;
 wire [`MW_BUS_Wid-1:0]          MW_BUS;
 wire [`ED_for_BUS_Wid-1:0]      ED_for_BUS;
+wire [13:0]                     csr_raddr_forward;
+wire [31:0]                     csr_rdata_forward;
 wire [`MD_for_BUS_Wid-1:0]      MD_for_BUS;
 wire [`Wrf_BUS_Wid-1:0]         Wrf_BUS;
 wire [`Wcsr_BUS_Wid-1:0]        Wcsr_BUS;
@@ -82,9 +83,7 @@ wire [31:0]                     ex_entryPC;
 wire                            ertn_flush;
 wire [31:0]                     new_pc;
 
-wire                            BTB_stall;
-wire                            predict_error_D;
-wire                            predict_error_E;
+wire                            predict_error;
 wire [ 7:0]                     hardware_interrupt;
 assign hardware_interrupt = ext_int;
 //assign hardware_interrupt = 8'b0;
@@ -177,15 +176,14 @@ Fetch u_Fetch(
     .clk             (aclk             ),
     .rstn            (aresetn          ),
     .predict_BUS     (predict_BUS     ),
-    .Branch_BUS_D    (Branch_BUS_D    ),
-    .Branch_BUS_E    (Branch_BUS_E    ),
+    .Branch_BUS      (Branch_BUS      ),
+    .predict_error   (predict_error   ),
     .ex_D            (ex_D            ),
     .ex_E            (ex_E            ),
     .ex_en_i         (ex_en           ),
     .ex_entryPC      (ex_entryPC      ),
     .ertn_flush_i    (ertn_flush      ),
     .new_pc          (new_pc          ),
-    .BTB_stall       (BTB_stall       ),
     .pD_allowin      (pD_allowin      ),
     .FpD_valid       (FpD_valid       ),
     .FpD_BUS         (FpD_BUS         ),
@@ -211,9 +209,7 @@ preDecode u_preDecode(
     .pD_allowin      (pD_allowin      ),
     .predict_BUS     (predict_BUS     ),
     .PB_BUS          (PB_BUS          ),
-    .BTB_stall       (BTB_stall       ),
-    .predict_error_D (predict_error_D ),
-    .predict_error_E (predict_error_E ),
+    .predict_error   (predict_error   ),
     .ertn_flush      (ertn_flush      ),
     .ex_D            (ex_D            ),
     .ex_E            (ex_E            ),
@@ -234,10 +230,9 @@ Decode u_Decode(
     .Wcsr_BUS           (Wcsr_BUS           ),
     .DE_valid           (DE_valid           ),
     .DE_BUS             (DE_BUS             ),
-    .BTB_stall_i        (BTB_stall          ),
-    .predict_error_D    (predict_error_D    ),
-    .predict_error_E    (predict_error_E    ),
-    .Branch_BUS_D       (Branch_BUS_D       ),
+    .csr_raddr_forward  (csr_raddr_forward  ),
+    .csr_rdata_forward  (csr_rdata_forward  ),
+    .predict_error      (predict_error      ),
     .ex_D               (ex_D               ),
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
@@ -255,10 +250,12 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
+    .csr_raddr_forward(csr_raddr_forward),
+    .csr_rdata_forward(csr_rdata_forward),
     .ex_E            (ex_E            ),
     .ex_en           (ex_en           ),
-    .predict_error_E (predict_error_E ),
-    .Branch_BUS_E    (Branch_BUS_E    ),
+    .predict_error   (predict_error   ),
+    .Branch_BUS      (Branch_BUS      ),
     .data_sram_req    (data_sram_req    ),
     .data_sram_wr     (data_sram_wr     ),
     .data_sram_size   (data_sram_size   ),

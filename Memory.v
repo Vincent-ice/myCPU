@@ -19,7 +19,6 @@ module Memory (
 
 //EM BUS
 reg [`EM_BUS_Wid-1:0] EM_BUS_M;
-wire [31:0] data_sram_rdata;
 wire [`WpD_BUS_Wid-1:0] PB_BUS_M;
 wire [31:0] pc_M;
 wire [31:0] rf_wdata_M;
@@ -35,14 +34,14 @@ wire        csr_we_M;
 wire [31:0] csr_wmask_M;
 wire [31:0] csr_wdata_M;
 
-assign {data_sram_rdata,PB_BUS_M,pc_M,rf_wdata_M,gr_we_M,dest_M,res_from_mem_M,vaddr_M,
+assign {PB_BUS_M,pc_M,rf_wdata_M,gr_we_M,dest_M,res_from_mem_M,vaddr_M,
         ex_E,ecode_M,esubcode_M,csr_addr_M,csr_we_M,csr_wmask_M,csr_wdata_M} = EM_BUS_M;
 
 //pipeline handshake
 reg    M_valid;
 wire   M_ready_go    = 1'b1;
-assign M_allowin     = !M_valid || M_ready_go && W_allowin;
-assign MW_valid      = M_valid && M_ready_go;
+(*max_fanout = 20*)assign M_allowin     = !M_valid || M_ready_go && W_allowin;
+(*max_fanout = 20*)assign MW_valid      = M_valid && M_ready_go;
 assign ex_M = M_valid && ex_E;
 always @(posedge clk) begin
     if (!rstn) begin
@@ -68,16 +67,27 @@ always @(posedge clk) begin
 end
 
 //data sram read manage
-wire  [31:0] mem_result_M;
+reg   [31:0] mem_result_M;
 wire  [31:0] final_result_M;
-assign mem_result_M   = res_from_mem_M[3] ? data_sram_rdata                                                                                                                             : 
-                        res_from_mem_M[1] ? res_from_mem_M[2] ? (vaddr_M[1] ? {16'b0,data_sram_rdata[31:16]} : {16'b0,data_sram_rdata[15:0]})                                       : 
-                                                                (vaddr_M[1] ? {{16{data_sram_rdata[31]}},data_sram_rdata[31:16]} : {{16{data_sram_rdata[15]}},data_sram_rdata[15:0]})   :
-                        res_from_mem_M[0] ? res_from_mem_M[2] ? (vaddr_M[1] ? (vaddr_M[0] ? {24'b0,data_sram_rdata[31:24]} : {24'b0,data_sram_rdata[23:16]}) :
-                                                                              (vaddr_M[0] ? {24'b0,data_sram_rdata[15: 8]} : {24'b0,data_sram_rdata[ 7:0]}))                        :
-                                                                (vaddr_M[1] ? (vaddr_M[0] ? {{24{data_sram_rdata[31]}},data_sram_rdata[31:24]} : {{24{data_sram_rdata[23]}},data_sram_rdata[23:16]}):
-                                                                              (vaddr_M[0] ? {{24{data_sram_rdata[15]}},data_sram_rdata[15: 8]} : {{24{data_sram_rdata[ 7]}},data_sram_rdata[ 7: 0]})) 
-                                            : 32'b0;
+always @(*) begin
+    case ({res_from_mem_M,vaddr_M[1:0]})
+        6'b0001_00 : mem_result_M = {{24{rf_wdata_M[ 7]}},rf_wdata_M[ 7: 0]};
+        6'b0001_01 : mem_result_M = {{24{rf_wdata_M[15]}},rf_wdata_M[15: 8]};
+        6'b0001_10 : mem_result_M = {{24{rf_wdata_M[23]}},rf_wdata_M[23:16]};
+        6'b0001_11 : mem_result_M = {{24{rf_wdata_M[31]}},rf_wdata_M[31:24]};
+        6'b0101_00 : mem_result_M = {24'b0               ,rf_wdata_M[ 7: 0]};
+        6'b0101_01 : mem_result_M = {24'b0               ,rf_wdata_M[15: 8]};
+        6'b0101_10 : mem_result_M = {24'b0               ,rf_wdata_M[23:16]};
+        6'b0101_11 : mem_result_M = {24'b0               ,rf_wdata_M[31:24]};
+        6'b0011_00 : mem_result_M = {{16{rf_wdata_M[15]}},rf_wdata_M[15: 0]};
+        6'b0011_10 : mem_result_M = {{16{rf_wdata_M[31]}},rf_wdata_M[31:16]};
+        6'b0111_00 : mem_result_M = {16'b0               ,rf_wdata_M[15: 0]};
+        6'b0111_10 : mem_result_M = {16'b0               ,rf_wdata_M[31:16]};
+        6'b1111_00 : mem_result_M = rf_wdata_M;
+        default    : mem_result_M = 32'b0;
+    endcase
+end
+
 assign final_result_M = |res_from_mem_M ? mem_result_M : rf_wdata_M;
 
 //MW BUS

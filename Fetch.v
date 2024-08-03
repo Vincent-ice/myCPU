@@ -55,7 +55,7 @@ reg  [31:0] br_target_buff;
 reg  send_handshake;
 reg  F_valid;
 wire F_valid_next   = rstn & inst_sram_req & inst_sram_addr_ok;//next cycle valid
-wire F_ready_go;//ready send to next stage
+(*max_fanout = 20*)wire F_ready_go;//ready send to next stage
 reg  F_ready_go_buff;
 always @(posedge clk) begin
     if (!rstn) begin
@@ -105,13 +105,13 @@ always @(posedge clk) begin
         br_taken_buff <= 1'b0;
         br_target_buff <= 32'b0;
     end
-    else if (!br_taken_buff & predict_taken | br_taken) begin
+    else if (br_taken) begin
         br_taken_buff <= 1'b1;
-        case (1'b1)
-            br_taken : br_target_buff <= br_target;
-            predict_taken : br_target_buff <= predict_target;
-            default    : br_target_buff <= 32'b0;
-        endcase
+        br_target_buff <= br_target;
+    end
+    else if (!br_taken_buff & predict_taken) begin
+        br_taken_buff <= 1'b1;
+        br_target_buff <= predict_target;
     end
     else if (F_valid_next & F_allowin || ex_en) begin
         br_taken_buff <= 1'b0;

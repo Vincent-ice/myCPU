@@ -3,8 +3,8 @@ module alu(
   input  wire clk,
   input  wire rstn,
   input  wire [`alu_op_Wid-1:0] alu_op,
-  input  wire [31:0] alu_src1,
-  input  wire [31:0] alu_src2,
+(*max_fanout = 20*)  input  wire [31:0] alu_src1,
+(*max_fanout = 20*)  input  wire [31:0] alu_src2,
   output reg  [31:0] alu_result,
   output wire        stall
 );
@@ -136,7 +136,7 @@ wire div_ready;
 reg  div_ready_delay;
 wire div_history_find;
 wire div_go = div_ready_delay & (|alu_src2) & (op_div | op_mod | op_divu | op_modu);
-wire dividend_is_0 = !(|alu_src1) & div_go;
+wire dividend_is_0 = !(|alu_src1);
 wire div_en = !div_history_find & div_go & !dividend_is_0;
 wire div_sign = (op_div | op_mod);
 wire [31:0] rem,quo;
@@ -165,18 +165,18 @@ always @(posedge clk) begin
 end
 
   // div result history
-reg [31:0] op1_history [7:0];
-reg [31:0] op2_history [7:0];
-reg [31:0] rem_history [7:0];
-reg [31:0] quo_history [7:0];
-reg        sign_history[7:0];
-reg [ 3:0] tag;
+reg [31:0] op1_history [1:0];
+reg [31:0] op2_history [1:0];
+reg [31:0] rem_history [1:0];
+reg [31:0] quo_history [1:0];
+reg        sign_history[1:0];
+reg        tag;
 
 integer n = 0;
 always @(posedge clk) begin
   if (!rstn) begin
-    tag <= 4'b0;
-    for (n = 0;n < 8;n = n + 1) begin
+    tag <= 1'b0;
+    for (n = 0;n < 2;n = n + 1) begin
       op1_history[n] <= 32'b0;
       op2_history[n] <= 32'b0;
       rem_history[n] <= 32'b0;
@@ -185,7 +185,7 @@ always @(posedge clk) begin
     end
   end
   else if (div_complete) begin
-    tag              <= tag + 1;
+    tag              <= !tag;
     op1_history[tag] <= alu_src1;
     op2_history[tag] <= alu_src2;
     sign_history[tag]<= div_sign;
@@ -194,11 +194,11 @@ always @(posedge clk) begin
   end
 end
 
-wire [7:0] find_buff ;
+(*max_fanout = 20*)wire [1:0] find_buff ;
 generate
   genvar i;
-  for (i = 0; i < 8; i = i + 1) begin
-    assign find_buff[i] = div_go & (op1_history[i] == alu_src1) & (op2_history[i] == alu_src2);
+  for (i = 0; i < 2; i = i + 1) begin
+    assign find_buff[i] = div_go && (&(op1_history[i] ^ (~alu_src1))) && (&(op2_history[i] ^ (~alu_src2)));
   end
 endgenerate
 assign div_history_find = |find_buff;
@@ -209,12 +209,6 @@ always @(*) begin
   case (1'b1)
     find_buff[0] : begin find_rem = rem_history[0]; find_quo = quo_history[0]; end
     find_buff[1] : begin find_rem = rem_history[1]; find_quo = quo_history[1]; end
-    find_buff[2] : begin find_rem = rem_history[2]; find_quo = quo_history[2]; end
-    find_buff[3] : begin find_rem = rem_history[3]; find_quo = quo_history[3]; end
-    find_buff[4] : begin find_rem = rem_history[4]; find_quo = quo_history[4]; end
-    find_buff[5] : begin find_rem = rem_history[5]; find_quo = quo_history[5]; end
-    find_buff[6] : begin find_rem = rem_history[6]; find_quo = quo_history[6]; end
-    find_buff[7] : begin find_rem = rem_history[7]; find_quo = quo_history[7]; end
     default      : begin find_rem = 32'b0         ; find_quo = 32'b0         ; end
   endcase
 end

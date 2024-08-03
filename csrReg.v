@@ -30,7 +30,8 @@ module csrReg (
     output [31:0]               ex_entryPC,
 
     output [63:0]               counter,
-    output [31:0]               counterID
+    output [31:0]               counterID,
+    output [63:0]               counter_shift
 );
 
 //csr register
@@ -207,7 +208,7 @@ always @(posedge clk ) begin
         `CSR_CRMD_IE  <= `CSR_PRMD_PIE ;
     end 
     else if (CRMD_we) begin
-        csr_CRMD[8:0] <= csr_wdata[8:0] & csr_wmask[8:0] | ~csr_wmask[8:0] & csr_CRMD[8:0];
+        csr_CRMD[8:0] <= csr_wdata[8:0];
     end
 end
 
@@ -221,7 +222,7 @@ always @(posedge clk ) begin
         `CSR_PRMD_PIE  <= `CSR_CRMD_IE ;
     end
     else if (PRMD_we) begin
-        csr_PRMD[2:0] <= csr_wdata[2:0] & csr_wmask[2:0] | ~csr_wmask[2:0] & csr_PRMD[2:0];
+        csr_PRMD[2:0] <= csr_wdata[2:0];
     end
 end
 
@@ -231,7 +232,7 @@ always @(posedge clk ) begin
         csr_EUEN <= 32'b0;
     end
     else if (EUEN_we) begin
-        csr_EUEN[0] <= csr_wdata[0] & csr_wmask[0] | ~csr_wmask[0] & csr_EUEN[0];
+        csr_EUEN[0] <= csr_wdata[0];
     end
 end
 
@@ -241,8 +242,9 @@ always @(posedge clk ) begin
         csr_ECFG <= 32'b0;
     end
     else if (ECFG_we) begin
-        csr_ECFG[9:0] <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & csr_ECFG[9:0];
-        csr_ECFG[12:11] <= csr_wdata[12:11] & csr_wmask[12:11] | ~csr_wmask[12:11] & csr_ECFG[12:11];
+        csr_ECFG[9:0] <= csr_wdata[9:0];
+        //csr_ECFG[10]  <= csr_wdata[10];
+        csr_ECFG[12:11] <= csr_wdata[12:11];
     end
 end
 
@@ -270,7 +272,7 @@ always @(posedge clk ) begin
             `CSR_ESTAT_ESUBCODE <= {8'b0,esubcode};
         end
         else if (ESTAT_we) begin
-            csr_ESTAT[1:0] <= csr_wdata[1:0] & csr_wmask[1:0] | ~csr_wmask[1:0] & csr_ESTAT[1:0];
+            csr_ESTAT[1:0] <= csr_wdata[1:0];
         end
 
         `CSR_ESTAT_IS_9_2 <= hardware_interrupt;
@@ -335,7 +337,7 @@ always @(posedge clk ) begin
         csr_EENTRY <= 32'b0;
     end
     else if (EENTRY_we) begin
-        csr_EENTRY[31:6] <= csr_wdata[31:6] & csr_wmask[31:6] | ~csr_wmask[31:6] & csr_EENTRY[31:6];
+        csr_EENTRY[31:6] <= csr_wdata[31:6];
     end
 end
 assign ex_entryPC = csr_EENTRY;
@@ -403,7 +405,7 @@ always @(posedge clk ) begin
         csr_TCFG <= 32'b0;
     end
     else if (TCFG_we) begin
-        csr_TCFG <= csr_wdata & csr_wmask | ~csr_wmask & csr_TCFG;
+        csr_TCFG <= csr_wdata;
     end
 end
 
@@ -457,7 +459,7 @@ always @(posedge clk ) begin
         end
     end
     else if (LLBCTL_we) begin 
-        csr_LLBCTL[2] <= csr_wdata[2] & csr_wmask[2] | ~csr_wmask[2] & csr_LLBCTL[2];
+        csr_LLBCTL[2] <= csr_wdata;
         if (csr_wdata[1] == 1'b1) begin
             LLbit <= 1'b0;
         end
@@ -478,7 +480,8 @@ always @(posedge clk ) begin
         timer_64 <= timer_64 + 1'b1;
     end
 end
-assign counter = timer_64 + {{32{csr_CNTC[31]}}, csr_CNTC};
+assign counter = timer_64;
+assign counter_shift = {{32{csr_CNTC[31]}},csr_CNTC};
 assign counterID = timerID;
 
 //CNTC
@@ -487,7 +490,7 @@ always @(posedge clk) begin
         csr_CNTC <= 32'b0;
     end
     else if (CNTC_we) begin
-        csr_CNTC <= csr_wdata & csr_wmask | ~csr_wmask & csr_CNTC;
+        csr_CNTC <= csr_wdata;
     end
 end
 

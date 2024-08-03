@@ -19,6 +19,9 @@ module Decode (
     output                          DE_valid,
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
+    input  [13:0]                   csr_raddr_forward,
+    output [31:0]                   csr_rdata_forward,
+
     input                           predict_error,
     output                          ex_D,
     output                          ex_en,
@@ -58,8 +61,8 @@ reg  ex_flag;
 wire load_stall;
 wire forward_stall;
 wire D_ready_go    = D_valid & !load_stall & !forward_stall;
-assign D_allowin   = !D_valid || D_ready_go && E_allowin;
-assign DE_valid    = D_valid && D_ready_go;
+(*max_fanout = 20*)assign D_allowin   = !D_valid || D_ready_go && E_allowin;
+(*max_fanout = 20*)assign DE_valid    = D_valid && D_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
         pDD_BUS_D <= 'b0;
@@ -336,23 +339,20 @@ wire        csr_we_W;
 wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
-reg  [13:0] csr_raddr_forward;
-wire [31:0] csr_rdata_forward;
 wire        ex_en_W;
 wire [ 7:0] ecode_W;
 wire        esubcode_W;
 wire [31:0] pc_W;
-wire [31:0] ex_pc;
 wire [31:0] era_pc;
 wire [31:0] vaddr_W;
 wire        has_int;
 wire [ 7:0] int_ecode;
 wire [63:0] counter;
 wire [31:0] counterID;
+wire [63:0] counter_shift;
 assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
 assign ertn_flush = inst_ertn && D_valid;
 assign ex_en      = ex_en_W;
-assign ex_pc      = ex_pD ? pc_D - 32'd4 : pc_W;
 
 csrReg u_csrReg(
     .clk       (clk       ),
@@ -378,28 +378,20 @@ csrReg u_csrReg(
     .ertn_flush(ertn_flush),
     .ex_entryPC(ex_entryPC),
     .counter   (counter   ),
-    .counterID (counterID )
+    .counterID (counterID ),
+    .counter_shift(counter_shift)
 );
 
     //forward manage
-wire        csr_forward_E = csr_we_E && (csr_addr_E == csr_addr);
-wire        csr_forward_M = csr_we_M && (csr_addr_M == csr_addr);
-wire        csr_forward_W = csr_we_W && (csr_addr_W == csr_addr);
-always @(*) begin
-    case (1'b1)
-        csr_forward_E : csr_raddr_forward = csr_addr_E;
-        csr_forward_M : csr_raddr_forward = csr_addr_M;
-        csr_forward_W : csr_raddr_forward = csr_addr_W;
-        default       : csr_raddr_forward = 14'b0;
-    endcase
-end
-
+wire        csr_forward_E = csr_we_E && (&(csr_addr_E ^ (~csr_addr)));
+wire        csr_forward_M = csr_we_M && (&(csr_addr_M ^ (~csr_addr)));
+wire        csr_forward_W = csr_we_W && (&(csr_addr_W ^ (~csr_addr)));
 reg  [31:0] csr_value;
 always @(*) begin
     case (1'b1)
-        csr_forward_E : csr_value = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
-        csr_forward_M : csr_value = (csr_wdata_M & csr_wmask_M) | (~csr_wmask_M & csr_rdata_forward);
-        csr_forward_W : csr_value = (csr_wdata_W & csr_wmask_W) | (~csr_wmask_W & csr_rdata_forward);
+        csr_forward_E : csr_value = csr_wdata_E;
+        csr_forward_M : csr_value = csr_wdata_M;
+        csr_forward_W : csr_value = csr_wdata_W;
         default       : csr_value = csr_rdata;
 endcase
 end

@@ -2,7 +2,7 @@
 `include "Defines.vh"
 module preDecode (
     input                       clk,
-    input                       rstn,
+(*max_fanout = 40*)    input                       rstn,
 
     input                       FpD_valid,
     input  [`FpD_BUS_Wid-1:0]   FpD_BUS,
@@ -48,15 +48,15 @@ reg  pD_valid;
 wire ex_pD;
 reg  ex_flag;
 wire pD_ready_go    = pD_valid;
-assign pD_allowin   = !pD_valid || pD_ready_go && D_allowin;
-assign pDD_valid    = pD_valid && pD_ready_go;
+(*max_fanout = 20*)assign pD_allowin   = !pD_valid || pD_ready_go && D_allowin;
+(*max_fanout = 20*)assign pDD_valid    = pD_valid && pD_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
         FpD_BUS_pD <= 'b0;
     end
-/*     else if (ex_en) begin
+    else if (ex_en) begin
         FpD_BUS_pD <= 'b0;
-    end */
+    end
     else if (FpD_valid && pD_allowin) begin
         FpD_BUS_pD <= FpD_BUS;
     end
@@ -98,11 +98,11 @@ integer n;
 always @(posedge clk) begin
     if (!rstn) begin
         BTB_tag <= 'b0;
-        //for (n = 0;n < `BTB_NUM;n = n + 1) begin
-        //    BTB_PC[n]    <= 12'h0;
-        //    BTB_value[n] <= 1'b0;
-        //    BTB_predict[n]<= 32'h0;
-        //end
+        for (n = 0;n < `BTB_NUM;n = n + 1) begin
+            BTB_PC[n]    <= 12'h0;
+            BTB_value[n] <= 1'b0;
+            BTB_predict[n]<= 32'h0;
+        end
     end
     else if (direct_jump_W) begin
         BTB_PC[BTB_tag] <= pc_W[13:2];
@@ -142,12 +142,12 @@ wire [1:0]          PHT_wdata;
 bimodal_predictor u_bimodal_predictor(.data_i(PHT[PHT_index_W]),.taken(br_taken_W),.data_o(PHT_wdata));
 always @(posedge clk) begin
     if (!rstn) begin
-        //for (n = 0;n < 2**`BHT_INDEX_Wid;n = n + 1) begin
-        //    BHT[n] <= `BHR_Wid'b0;
-        //end
-        //for (n = 0;n < 2**`BHR_Wid;n = n + 1) begin
-        //    PHT[n] <= 2'b0;
-        //end    
+        for (n = 0;n < 2**`BHT_INDEX_Wid;n = n + 1) begin
+            BHT[n] <= `BHR_Wid'b0;
+        end
+        for (n = 0;n < 2**`BHR_Wid;n = n + 1) begin
+            PHT[n] <= 2'b0;
+        end    
     end
     else if (indirect_jump_W) begin
         BHT[BHT_index_W] <= {BHT[BHT_index_W][`BHR_Wid-2:0],br_taken_W};
@@ -163,9 +163,9 @@ wire [31:0] TC_target;
 
 always @(posedge clk) begin
     if (!rstn) begin
-        //for (n = 0;n < `TC_NUM;n = n + 1) begin
-        //    TC_PC[n] <= 32'b0;
-        //end
+        for (n = 0;n < `TC_NUM;n = n + 1) begin
+            TC_PC[n] <= 32'b0;
+        end
     end
     else if (indirect_jump_W && br_taken_W) begin
         TC_PC[PHT_index_W] <= br_target_W;
