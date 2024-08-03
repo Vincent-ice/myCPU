@@ -366,7 +366,6 @@ assign new_pc = in_ex &&
 
 //BADV
 wire va_error = (ecode == `ECODE_ALE ) ||
-wire va_error = (ecode == `ECODE_ALE ) ||
                 (ecode == `ECODE_PIL ) || (ecode == `ECODE_PIS) ||
                 (ecode == `ECODE_PIF ) || (ecode == `ECODE_PME) ||
                 (ecode == `ECODE_PPI ) || (ecode == `ECODE_TLBR) ;

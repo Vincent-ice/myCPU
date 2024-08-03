@@ -3,7 +3,7 @@ module multCore (
     input wire rstn,
     input wire [31:0] op1,op2,
     input wire sign_en, //1为有符号
-    output reg [63:0] out
+    output wire [63:0] out
 );
 (*max_fanout = 20*)wire [65:0] op1_ext = sign_en ? (op1[31] ? {34'h3_ffff_ffff,op1} : {34'b0,op1})
                                    : {34'b0,op1};

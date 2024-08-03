@@ -354,8 +354,6 @@ wire        csr_we_W;
 wire [13:0] csr_addr_W;
 wire [31:0] csr_wmask_W;
 wire [31:0] csr_wdata_W;
-reg  [13:0] csr_raddr_forward;
-wire [31:0] csr_rdata_forward;
 wire        ex_en_W;
 wire [ 7:0] ecode_W;
 wire        esubcode_W;
