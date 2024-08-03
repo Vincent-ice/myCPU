@@ -71,7 +71,7 @@ reg  [`TLB2CSR_BUS_MW_Wid-1:0] TLB2CSR_BUS_W;
 //pipeline handshake
 reg    W_valid;
 wire   W_ready_go = 1'b1;
-assign W_allowin  = !W_valid || W_ready_go;
+(*max_fanout = 20*)assign W_allowin  = !W_valid || W_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
         MW_BUS_W <= 'b0;
@@ -125,7 +125,7 @@ assign Wcsr_BUS = {ex_W && W_valid,     //152
                    vaddr_W};            //31:0
 
 //PB BUS
-assign PB_BUS = {PB_BUS_W & {`WpD_BUS_Wid{W_valid}},pc_W};
+assign PB_BUS = W_valid ? {PB_BUS_W,pc_W} : 'b0;
 
 // debug info generate
 assign debug_wb_pc       = pc_W;

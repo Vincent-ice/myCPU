@@ -19,6 +19,9 @@ module Decode (
     output                          DE_valid,
     output [`DE_BUS_Wid-1:0]        DE_BUS,
 
+    input  [13:0]                   csr_raddr_forward,
+    output [31:0]                   csr_rdata_forward,
+
     input                           predict_error,
     output                          ex_D,
     output                          ex_en,
@@ -64,8 +67,8 @@ reg  ex_flag;
 wire load_stall;
 wire forward_stall;
 wire D_ready_go    = D_valid & !load_stall & !forward_stall;
-assign D_allowin   = !D_valid || D_ready_go && E_allowin;
-assign DE_valid    = D_valid && D_ready_go;
+(*max_fanout = 20*)assign D_allowin   = !D_valid || D_ready_go && E_allowin;
+(*max_fanout = 20*)assign DE_valid    = D_valid && D_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
         pDD_BUS_D <= 'b0;
@@ -357,17 +360,16 @@ wire        ex_en_W;
 wire [ 7:0] ecode_W;
 wire        esubcode_W;
 wire [31:0] pc_W;
-wire [31:0] ex_pc;
 wire [31:0] era_pc;
 wire [31:0] vaddr_W;
 wire        has_int;
 wire [ 7:0] int_ecode;
 wire [63:0] counter;
 wire [31:0] counterID;
+wire [63:0] counter_shift;
 assign {ex_en_W,ecode_W,esubcode_W,csr_we_W,csr_addr_W,csr_wmask_W,csr_wdata_W,pc_W,vaddr_W} = Wcsr_BUS;
 assign ertn_flush = inst_ertn && D_valid;
 assign ex_en      = ex_en_W;
-assign ex_pc      = ex_pD ? pc_D - 32'd4 : pc_W;
 
 csrReg u_csrReg(
     .clk       (clk       ),
@@ -395,6 +397,7 @@ csrReg u_csrReg(
     .TLBR_entryPC(TLBR_entryPC),
     .counter   (counter   ),
     .counterID (counterID ),
+    .counter_shift(counter_shift),
     .CSR2TLB_BUS(CSR2TLB_BUS),
     .TLB2CSR_BUS(TLB2CSR_BUS_W),
     .CSR2FE_BUS(CSR2FE_BUS)
@@ -405,26 +408,17 @@ assign CSR2TLB_BUS_D = {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_inv
 /* !! TLB CSR2TLB may get old csr data due to inst_csrwr haven't written back */
 
     //forward manage
-wire        csr_forward_E = csr_we_E && (csr_addr_E == csr_addr);
-wire        csr_forward_M = csr_we_M && (csr_addr_M == csr_addr);
-wire        csr_forward_W = csr_we_W && (csr_addr_W == csr_addr);
-always @(*) begin
-    case (1'b1)
-        csr_forward_E : csr_raddr_forward = csr_addr_E;
-        csr_forward_M : csr_raddr_forward = csr_addr_M;
-        csr_forward_W : csr_raddr_forward = csr_addr_W;
-        default       : csr_raddr_forward = 14'b0;
-    endcase
-end
-
+wire        csr_forward_E = csr_we_E && (&(csr_addr_E ^ (~csr_addr)));
+wire        csr_forward_M = csr_we_M && (&(csr_addr_M ^ (~csr_addr)));
+wire        csr_forward_W = csr_we_W && (&(csr_addr_W ^ (~csr_addr)));
 reg  [31:0] csr_value;
 always @(*) begin
     case (1'b1)
-        csr_forward_E : csr_value = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
-        csr_forward_M : csr_value = (csr_wdata_M & csr_wmask_M) | (~csr_wmask_M & csr_rdata_forward);
-        csr_forward_W : csr_value = (csr_wdata_W & csr_wmask_W) | (~csr_wmask_W & csr_rdata_forward);
+        csr_forward_E : csr_value = csr_wdata_E;
+        csr_forward_M : csr_value = csr_wdata_M;
+        csr_forward_W : csr_value = csr_wdata_W;
         default       : csr_value = csr_rdata;
-    endcase
+endcase
 end
 
 assign new_pc = era_pc;
@@ -477,9 +471,9 @@ wire       unknownInst = !{|{inst_add_w,inst_sub_w,inst_slt,inst_sltu,inst_nor,i
                              inst_sltui,inst_addi_w,inst_andi,inst_ori,inst_xori,inst_pcaddu12i,inst_jirl,
                              inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
                              inst_ld_b,inst_ld_h,inst_ld_bu,inst_ld_hu,inst_ld_w,inst_st_b,inst_st_h,inst_st_w,
-                             inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,inst_cacop,
+                             inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,inst_cacop,inst_cacop,
                              inst_rdcntid,inst_rdcntvl_w,inst_rdcntvh_w,inst_tlbfill,inst_tlbwr,inst_tlbrd,inst_tlbsrch,inst_invtlb}};
-assign     ex_D    = D_ready_go && !predict_error & (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
+assign     ex_D    = D_ready_go && !predict_error & !predict_error & (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      ex_pD        ? ecode_pD   :
                      has_int      ? int_ecode  :

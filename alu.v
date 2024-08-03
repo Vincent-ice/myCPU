@@ -3,8 +3,8 @@ module alu(
   input  wire clk,
   input  wire rstn,
   input  wire [`alu_op_Wid-1:0] alu_op,
-  input  wire [31:0] alu_src1,
-  input  wire [31:0] alu_src2,
+(*max_fanout = 20*)  input  wire [31:0] alu_src1,
+(*max_fanout = 20*)  input  wire [31:0] alu_src2,
   output reg  [31:0] alu_result,
   output wire        stall
 );
@@ -136,7 +136,7 @@ wire div_ready;
 reg  div_ready_delay;
 wire div_history_find;
 wire div_go = div_ready_delay & (|alu_src2) & (op_div | op_mod | op_divu | op_modu);
-wire dividend_is_0 = !(|alu_src1) & div_go;
+wire dividend_is_0 = !(|alu_src1);
 wire div_en = !div_history_find & div_go & !dividend_is_0;
 wire div_sign = (op_div | op_mod);
 wire [31:0] rem,quo;
@@ -194,11 +194,11 @@ always @(posedge clk) begin
   end
 end
 
-wire [1:0] find_buff ;
+(*max_fanout = 20*)wire [1:0] find_buff ;
 generate
   genvar i;
   for (i = 0; i < 2; i = i + 1) begin
-    assign find_buff[i] = div_go & (op1_history[i] == alu_src1) & (op2_history[i] == alu_src2);
+    assign find_buff[i] = div_go && (&(op1_history[i] ^ (~alu_src1))) && (&(op2_history[i] ^ (~alu_src2)));
   end
 endgenerate
 assign div_history_find = |find_buff;

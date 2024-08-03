@@ -64,6 +64,8 @@ wire [`EM_BUS_Wid-1:0]          EM_BUS;
 wire                            MW_valid;
 wire [`MW_BUS_Wid-1:0]          MW_BUS;
 wire [`ED_for_BUS_Wid-1:0]      ED_for_BUS;
+wire [13:0]                     csr_raddr_forward;
+wire [31:0]                     csr_rdata_forward;
 wire [`MD_for_BUS_Wid-1:0]      MD_for_BUS;
 wire [`Wrf_BUS_Wid-1:0]         Wrf_BUS;
 wire [`Wcsr_BUS_Wid-1:0]        Wcsr_BUS;
@@ -311,6 +313,8 @@ Decode u_Decode(
     .Wcsr_BUS           (Wcsr_BUS           ),
     .DE_valid           (DE_valid           ),
     .DE_BUS             (DE_BUS             ),
+    .csr_raddr_forward  (csr_raddr_forward  ),
+    .csr_rdata_forward  (csr_rdata_forward  ),
     .predict_error      (predict_error      ),
     .ex_D               (ex_D               ),
     .ex_en              (ex_en              ),
@@ -334,6 +338,8 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
+    .csr_raddr_forward(csr_raddr_forward),
+    .csr_rdata_forward(csr_rdata_forward),
     .CSR2FE_BUS      (CSR2FE_BUS      ),
     .CSR2TLB_BUS_D   (CSR2TLB_BUS_DE  ),
     .CSR2TLB_BUS     (CSR2TLB_BUS_EM  ),
@@ -342,27 +348,15 @@ Excute u_Excute(
     .ex_en           (ex_en           ),
     .predict_error   (predict_error   ),
     .Branch_BUS      (Branch_BUS      ),
-    .data_sram_req   (data_sram_req   ),
-    .data_sram_wstrb (data_sram_wstrb ),
-    .data_sram_addr  (data_sram_addr  ),
-    .data_sram_wdata (data_sram_wdata ),
-    .data_sram_size  (data_sram_size  ),
-    .data_sram_rdata (data_sram_rdata ),
-    .data_sram_addr_ok (data_sram_addr_ok),
-    .data_sram_data_ok (data_sram_data_ok),
-    .data_sram_wr    (data_sram_wr    ),
-
-    .s1_vppn         (s1_vppn         ),
-    .s1_va_bit12     (s1_va_bit12     ),
-    .s1_asid         (s1_asid         ),
-    .s1_found        (s1_found        ),
-    .s1_index        (s1_index        ),
-    .s1_ppn          (s1_ppn          ),
-    .s1_ps           (s1_ps           ),
-    .s1_plv          (s1_plv          ),
-    .s1_mat          (s1_mat          ),
-    .s1_d            (s1_d            ),
-    .s1_v            (s1_v            )
+    .data_sram_req    (data_sram_req    ),
+    .data_sram_wr     (data_sram_wr     ),
+    .data_sram_size   (data_sram_size   ),
+    .data_sram_wstrb  (data_sram_wstrb  ),
+    .data_sram_addr   (data_sram_addr   ),
+    .data_sram_wdata  (data_sram_wdata  ),
+    .data_sram_rdata  (data_sram_rdata  ),
+    .data_sram_addr_ok(data_sram_addr_ok),
+    .data_sram_data_ok(data_sram_data_ok)
 );
 
 Memory u_Memory(

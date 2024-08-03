@@ -13,6 +13,8 @@ module Excute (
     output  [`EM_BUS_Wid-1:0]   EM_BUS,
 
     output  [`ED_for_BUS_Wid-1:0]   ED_for_BUS,
+    output  [13:0]              csr_raddr_forward,
+    input   [31:0]              csr_rdata_forward,
 
     input   [`CSR2FE_BUS_Wid-1:0]      CSR2FE_BUS,
     input   [`CSR2TLB_BUS_DE_Wid-1:0]  CSR2TLB_BUS_D,
@@ -88,8 +90,8 @@ reg    E_valid;
 reg    ex_flag;
 reg    send_handshake;
 wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sram_data_ok || ex_E;
-assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall;
-assign EM_valid       = E_valid && E_ready_go && !stall;
+(*max_fanout = 20*)assign E_allowin      = (!E_valid || E_ready_go && M_allowin) && !stall;
+(*max_fanout = 20*)assign EM_valid       = E_valid && E_ready_go && !stall;
 always @(posedge clk) begin
     if (!rstn) begin
         DE_BUS_E <= 'b0;
@@ -308,13 +310,23 @@ always @(posedge clk) begin
 end
 
 //regfile wdata from csr
-wire [31:0] rf_wdata_E = res_from_csr_E ? csr_rdata_E : alu_result_E;
+reg  [31:0] rf_wdata_E;
+always @(*) begin
+    case (1'b1)
+        |res_from_mem_E : rf_wdata_E = data_sram_rdata;
+        res_from_csr_E  : rf_wdata_E = csr_rdata_E;
+        |alu_op_E       : rf_wdata_E = alu_result_E;
+        default         : rf_wdata_E = 32'b0;
+    endcase
+end
+
 
 //indirect predict branch judge
 wire rj_eq_rd = (alu_src1_E == alu_src2_E);
 wire rj_lt_rd = ($signed(alu_src1_E) < $signed(alu_src2_E));
 wire rj_ltu_rd= (alu_src1_E < alu_src2_E);
 reg  br_taken;
+wire [31:0] pc_E_plus4;
 wire [31:0] br_PC;
 wire [31:0] br_target_final;
 always @(*) begin
@@ -332,9 +344,11 @@ always @(*) begin
     endcase
 end
 assign br_PC = br_base + br_offs;
+assign br_target_error = (br_PC != predict_target);
+assign pc_E_plus4 = pc_E + 32'd4;
 assign predict_error = E_valid && (br_taken ^ predict_taken ||
-                       br_taken & predict_taken & (br_PC != predict_target));
-assign br_target_final= br_taken ? br_PC : pc_E + 32'd4;
+                       br_taken & predict_taken & br_target_error);
+assign br_target_final= br_taken ? br_PC : pc_E_plus4;
 
 assign Branch_BUS = {predict_error,br_target_final};
 
@@ -342,9 +356,14 @@ wire        direct_jump   = inst_jirl || inst_b || inst_bl;
 wire        indirect_jump = inst_beq || inst_bne || inst_blt || inst_bge || inst_bltu || inst_bgeu;
 wire [31:0] br_target     = br_taken ? br_PC : 32'b0;
 assign PB_BUS_E = {inst_E,direct_jump,indirect_jump,br_taken,br_target};
+
+//csr forward caculate
+wire [31:0] csr_wdata_final;
+assign csr_raddr_forward = csr_we_E ? csr_addr_E : 14'b0;
+assign csr_wdata_final = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
+
 //EM BUS
-assign EM_BUS = {data_sram_rdata,   //293:262
-                 PB_BUS_E,          //261:195
+assign EM_BUS = {PB_BUS_E,          //261:195
                  pc_E,              //194:163
                  rf_wdata_E,        //162:131
                  gr_we_E,           //130
@@ -357,7 +376,7 @@ assign EM_BUS = {data_sram_rdata,   //293:262
                  csr_addr_E,        //78:65
                  csr_we_E,          //64
                  csr_wmask_E,       //63:32
-                 csr_wdata_E};      //31:0
+                 csr_wdata_final};      //31:0
 
 //ED forward BUS
 assign ED_for_BUS = {res_from_mem_E,                    //119:116
@@ -366,7 +385,7 @@ assign ED_for_BUS = {res_from_mem_E,                    //119:116
                      csr_we_E && E_valid,               //78
                      csr_addr_E,                        //77:64
                      csr_wmask_E,                       //63:32
-                     csr_wdata_E};                      //31:0
+                     csr_wdata_final};                      //31:0
 
 //TLB BUS
 assign CSR2TLB_BUS = CSR2TLB_BUS_E;

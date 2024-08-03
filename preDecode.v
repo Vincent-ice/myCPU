@@ -2,7 +2,7 @@
 `include "Defines.vh"
 module preDecode (
     input                       clk,
-    input                       rstn,
+(*max_fanout = 40*)    input                       rstn,
 
     input                       FpD_valid,
     input  [`FpD_BUS_Wid-1:0]   FpD_BUS,
@@ -48,15 +48,15 @@ reg  pD_valid;
 wire ex_pD;
 reg  ex_flag;
 wire pD_ready_go    = pD_valid;
-assign pD_allowin   = !pD_valid || pD_ready_go && D_allowin;
-assign pDD_valid    = pD_valid && pD_ready_go;
+(*max_fanout = 20*)assign pD_allowin   = !pD_valid || pD_ready_go && D_allowin;
+(*max_fanout = 20*)assign pDD_valid    = pD_valid && pD_ready_go;
 always @(posedge clk) begin
     if (!rstn) begin
         FpD_BUS_pD <= 'b0;
     end
-/*     else if (ex_en) begin
+    else if (ex_en) begin
         FpD_BUS_pD <= 'b0;
-    end */
+    end
     else if (FpD_valid && pD_allowin) begin
         FpD_BUS_pD <= FpD_BUS;
     end

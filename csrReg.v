@@ -32,6 +32,7 @@ module csrReg (
 
     output [63:0]               counter,
     output [31:0]               counterID,
+    output [63:0]               counter_shift,
 
     input  [`TLB2CSR_BUS_Wid-1:0] TLB2CSR_BUS,
     output [`CSR2TLB_BUS_Wid-1:0] CSR2TLB_BUS,
@@ -260,7 +261,7 @@ always @(posedge clk ) begin
         end
     end
     else if (CRMD_we) begin
-        csr_CRMD[8:0] <= csr_wdata[8:0] & csr_wmask[8:0] | ~csr_wmask[8:0] & csr_CRMD[8:0];
+        csr_CRMD[8:0] <= csr_wdata[8:0];
     end
 end
 
@@ -274,7 +275,7 @@ always @(posedge clk ) begin
         `CSR_PRMD_PIE  <= `CSR_CRMD_IE ;
     end
     else if (PRMD_we) begin
-        csr_PRMD[2:0] <= csr_wdata[2:0] & csr_wmask[2:0] | ~csr_wmask[2:0] & csr_PRMD[2:0];
+        csr_PRMD[2:0] <= csr_wdata[2:0];
     end
 end
 
@@ -284,7 +285,7 @@ always @(posedge clk ) begin
         csr_EUEN <= 32'b0;
     end
     else if (EUEN_we) begin
-        csr_EUEN[0] <= csr_wdata[0] & csr_wmask[0] | ~csr_wmask[0] & csr_EUEN[0];
+        csr_EUEN[0] <= csr_wdata[0];
     end
 end
 
@@ -294,8 +295,9 @@ always @(posedge clk ) begin
         csr_ECFG <= 32'b0;
     end
     else if (ECFG_we) begin
-        csr_ECFG[9:0] <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & csr_ECFG[9:0];
-        csr_ECFG[12:11] <= csr_wdata[12:11] & csr_wmask[12:11] | ~csr_wmask[12:11] & csr_ECFG[12:11];
+        csr_ECFG[9:0] <= csr_wdata[9:0];
+        //csr_ECFG[10]  <= csr_wdata[10];
+        csr_ECFG[12:11] <= csr_wdata[12:11];
     end
 end
 
@@ -323,7 +325,7 @@ always @(posedge clk ) begin
             `CSR_ESTAT_ESUBCODE <= {8'b0,esubcode};
         end
         else if (ESTAT_we) begin
-            csr_ESTAT[1:0] <= csr_wdata[1:0] & csr_wmask[1:0] | ~csr_wmask[1:0] & csr_ESTAT[1:0];
+            csr_ESTAT[1:0] <= csr_wdata[1:0];
         end
 
         `CSR_ESTAT_IS_9_2 <= hardware_interrupt;
@@ -364,9 +366,10 @@ assign new_pc = in_ex &&
 
 //BADV
 wire va_error = (ecode == `ECODE_ALE ) ||
+wire va_error = (ecode == `ECODE_ALE ) ||
                 (ecode == `ECODE_PIL ) || (ecode == `ECODE_PIS) ||
                 (ecode == `ECODE_PIF ) || (ecode == `ECODE_PME) ||
-                (ecode == `ECODE_PPI ) || (ecode == `ECODE_TLBR);
+                (ecode == `ECODE_PPI ) || (ecode == `ECODE_TLBR) ;
 always @(posedge clk ) begin
     if (!rstn) begin
         csr_BADV <= 32'b0;
@@ -388,7 +391,7 @@ always @(posedge clk ) begin
         csr_EENTRY <= 32'b0;
     end
     else if (EENTRY_we) begin
-        csr_EENTRY[31:6] <= csr_wdata[31:6] & csr_wmask[31:6] | ~csr_wmask[31:6] & csr_EENTRY[31:6];
+        csr_EENTRY[31:6] <= csr_wdata[31:6];
     end
 end
 assign ex_entryPC = csr_EENTRY;
@@ -456,7 +459,7 @@ always @(posedge clk ) begin
         csr_TCFG <= 32'b0;
     end
     else if (TCFG_we) begin
-        csr_TCFG <= csr_wdata & csr_wmask | ~csr_wmask & csr_TCFG;
+        csr_TCFG <= csr_wdata;
     end
 end
 
@@ -510,7 +513,7 @@ always @(posedge clk ) begin
         end
     end
     else if (LLBCTL_we) begin 
-        csr_LLBCTL[2] <= csr_wdata[2] & csr_wmask[2] | ~csr_wmask[2] & csr_LLBCTL[2];
+        csr_LLBCTL[2] <= csr_wdata;
         if (csr_wdata[1] == 1'b1) begin
             LLbit <= 1'b0;
         end
@@ -531,7 +534,8 @@ always @(posedge clk ) begin
         timer_64 <= timer_64 + 1'b1;
     end
 end
-assign counter = timer_64 + {{32{csr_CNTC[31]}}, csr_CNTC};
+assign counter = timer_64;
+assign counter_shift = {{32{csr_CNTC[31]}},csr_CNTC};
 assign counterID = timerID;
 
 //CNTC
@@ -540,7 +544,7 @@ always @(posedge clk) begin
         csr_CNTC <= 32'b0;
     end
     else if (CNTC_we) begin
-        csr_CNTC <= csr_wdata & csr_wmask | ~csr_wmask & csr_CNTC;
+        csr_CNTC <= csr_wdata;
     end
 end
 
@@ -573,7 +577,7 @@ always @(posedge clk) begin
         end
     end
     else if(TLBIDX_we)begin
-        csr_TLBIDX <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBIDX) & 32'hbf00_ffff;
+        csr_TLBIDX <= (csr_wdata) & 32'hbf00_ffff;
     end
 end
 
@@ -600,7 +604,7 @@ always @(posedge clk) begin
         `CSR_TLBEHI_VPPN <= vaddr[31:13];
     end
     else if(TLBEHI_we) begin
-        csr_TLBEHI[31:13] <= csr_wdata[31:13] & csr_wmask[31:13] | ~csr_wmask[31:13] & csr_TLBEHI[31:13]; 
+        csr_TLBEHI[31:13] <= csr_wdata[31:13]; 
     end 
 end
 
@@ -625,7 +629,7 @@ always @(posedge clk) begin
         end
     end
     else if(TLBELO0_we) begin
-        csr_TLBELO0 <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBELO0) & 32'hffff_ff7f;   
+        csr_TLBELO0 <= (csr_wdata) & 32'hffff_ff7f;   
     end
 end
 
@@ -649,7 +653,7 @@ always @(posedge clk) begin
         end
     end
     else if(TLBELO1_we) begin
-        csr_TLBELO1 <= (csr_wdata & csr_wmask | ~csr_wmask & csr_TLBELO1) & 32'hffff_ff7f;
+        csr_TLBELO1 <= (csr_wdata) & 32'hffff_ff7f;
     end
 end
 
@@ -668,7 +672,7 @@ always @(posedge clk) begin
         end
     end
     else if(ASID_we)begin
-        `CSR_ASID_ASID  <= csr_wdata[9:0] & csr_wmask[9:0] | ~csr_wmask[9:0] & `CSR_ASID_ASID;
+        `CSR_ASID_ASID  <= csr_wdata[9:0];
     end
 end
 
@@ -678,7 +682,7 @@ always @(posedge clk) begin
         csr_PGDL <= 32'b0;
     end 
     else if (PGDL_we) begin
-        `CSR_PGDL_BASE <= csr_wdata[31:12] & csr_wmask[31:12] | ~csr_wmask[31:12] & `CSR_PGDL_BASE;
+        `CSR_PGDL_BASE <= csr_wdata[31:12];
     end
 end
 
@@ -688,7 +692,7 @@ always @(posedge clk) begin
         csr_PGDH <= 32'b0;
     end 
     else if (PGDH_we) begin
-        `CSR_PGDH_BASE <= csr_wdata[31:12] & csr_wmask[31:12] | ~csr_wmask[31:12] & `CSR_PGDH_BASE;
+        `CSR_PGDH_BASE <= csr_wdata[31:12];
     end
 end
 
@@ -707,7 +711,7 @@ always @(posedge clk ) begin
         csr_TLBRENTRY <= 32'b0;
     end 
     else if(TLBRENTRY_we) begin
-        `CSR_TLBRENTRY_PA <= csr_wdata[31:6] & csr_wmask[31:6] | ~csr_wmask[31:6] & `CSR_TLBRENTRY_PA; 
+        `CSR_TLBRENTRY_PA <= csr_wdata[31:6]; 
     end
 end
 assign TLBR_entryPC = csr_TLBRENTRY;
@@ -717,16 +721,11 @@ always @ (posedge clk) begin
         csr_DMW0 <= 32'b0;
     end
     else if (DMW0_we) begin
-        `CSR_DMW0_VSEG <= csr_wmask[31:29] & csr_wdata[31:29]
-                       | ~csr_wmask[31:29] & `CSR_DMW0_VSEG;
-        `CSR_DMW0_PSEG <= csr_wmask[27:25] & csr_wdata[27:25]
-                       | ~csr_wmask[27:25] & `CSR_DMW0_PSEG;
-        `CSR_DMW0_MAT  <= csr_wmask[5:4]  & csr_wdata[5:4]
-                       | ~csr_wmask[5:4]  & `CSR_DMW0_MAT;
-        `CSR_DMW0_PLV3 <= csr_wmask[3] & csr_wdata[3]
-                       | ~csr_wmask[3] & `CSR_DMW0_PLV3;
-        `CSR_DMW0_PLV0 <= csr_wmask[0] & csr_wdata[0]
-                       | ~csr_wmask[0] & `CSR_DMW0_PLV0;
+        `CSR_DMW0_VSEG <= csr_wmask[31:29];
+        `CSR_DMW0_PSEG <= csr_wmask[27:25];
+        `CSR_DMW0_MAT  <= csr_wmask[5:4];
+        `CSR_DMW0_PLV3 <= csr_wmask[3];
+        `CSR_DMW0_PLV0 <= csr_wmask[0];
     end
 end
 
@@ -736,16 +735,11 @@ always @ (posedge clk) begin
         csr_DMW1 <= 32'b0;
     end
     else if (DMW1_we) begin
-        `CSR_DMW1_VSEG <= csr_wmask[31:29] & csr_wdata[31:29]
-                       | ~csr_wmask[31:29] & `CSR_DMW1_VSEG;
-        `CSR_DMW1_PSEG <= csr_wmask[27:25] & csr_wdata[27:25]
-                       | ~csr_wmask[27:25] & `CSR_DMW1_PSEG;
-        `CSR_DMW1_MAT  <= csr_wmask[5:4]  & csr_wdata[5:4]
-                       | ~csr_wmask[5:4]  & `CSR_DMW1_MAT;
-        `CSR_DMW1_PLV3 <= csr_wmask[3] & csr_wdata[3]
-                       | ~csr_wmask[3] & `CSR_DMW1_PLV3;
-        `CSR_DMW1_PLV0 <= csr_wmask[0] & csr_wdata[0]
-                       | ~csr_wmask[0] & `CSR_DMW1_PLV0;
+        `CSR_DMW1_VSEG <= csr_wmask[31:29];
+        `CSR_DMW1_PSEG <= csr_wmask[27:25];
+        `CSR_DMW1_MAT  <= csr_wmask[5:4];
+        `CSR_DMW1_PLV3 <= csr_wmask[3];
+        `CSR_DMW1_PLV0 <= csr_wmask[0];
     end
 end
 
