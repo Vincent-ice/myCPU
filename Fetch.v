@@ -48,7 +48,6 @@ reg  ex_F;
 reg  has_ex;
 reg  ex_en;
 reg  ertn_flush;
-wire br_taken = br_taken_i | predict_taken;
 reg  [31:0] br_target;
 reg  br_taken_buff;
 reg  [31:0] br_target_buff;
@@ -70,7 +69,7 @@ always @(posedge clk) begin
 end
 assign F_ready_go = F_ready_go_buff | (inst_sram_data_ok & !has_ex);
 wire F_allowin      = !F_valid || ex_en || F_ready_go && pD_allowin && !ex_F;//allow input data
-assign FpD_valid     = F_valid_next & F_ready_go & !br_taken_buff & !br_taken && !ertn_flush || (ex_F & !ex_en);//validity of D stage
+assign FpD_valid     = F_valid_next && F_ready_go && !br_taken_buff && !ertn_flush || (ex_F & !ex_en);//validity of D stage
 always @(posedge clk) begin
     if (!rstn) begin
         F_valid <= 1'b0;
@@ -93,21 +92,14 @@ always @(posedge clk) begin
 end
 
 //branch buff
-always @(*) begin
-    case (1'b1)
-        br_taken_i : br_target = br_target_i;
-        predict_taken : br_target = predict_target;
-        default    : br_target = 32'b0;
-    endcase
-end
 always @(posedge clk) begin
     if (!rstn) begin
         br_taken_buff <= 1'b0;
         br_target_buff <= 32'b0;
     end
-    else if (br_taken) begin
+    else if (br_taken_i) begin
         br_taken_buff <= 1'b1;
-        br_target_buff <= br_target;
+        br_target_buff <= br_target_i;
     end
     else if (!br_taken_buff & predict_taken) begin
         br_taken_buff <= 1'b1;
@@ -163,7 +155,6 @@ always @(*) begin
     case (1'b1)
         ex_en & has_ex: pc_next = ex_entryPC;
         br_taken_buff : pc_next = br_target_buff;
-        br_taken      : pc_next = br_target;
         has_ex        : pc_next = ex_entryPC;
         ertn_flush    : pc_next = new_pc;
         default       : pc_next = pc_plus4;
