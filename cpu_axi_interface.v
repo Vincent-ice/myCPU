@@ -131,7 +131,7 @@ end
 //inst sram-like
 assign inst_data_ok = do_req&&!do_req_or&&data_back;
 assign data_data_ok = do_req&& do_req_or&&data_back;
-assign inst_rdata   = rdata;
+//assign inst_rdata   = rdata;
 assign data_rdata   = rdata;
 
 //---axi
@@ -181,6 +181,96 @@ assign wlast  = 1'd1;
 assign wvalid = do_req&&do_wr_r&&!wdata_rcv;
 //b
 assign bready  = 1'b1;
+
+// FSM
+localparam ST_IDLE = 4'b0001;
+localparam ST_SRCH = 4'b0010;
+localparam ST_SEND = 4'b0100;
+localparam ST_GET  = 4'b1000;
+reg [3:0] state_reg;
+reg [3:0] state_next;
+wire      find_miss;
+
+always @(*) begin
+    case (state_reg)
+        ST_IDLE : begin
+            if (inst_req && inst_addr_ok) begin
+                state_next = ST_SRCH;
+            end
+            else begin
+                state_next = ST_IDLE;
+            end
+        end
+        ST_SRCH : begin
+            if (find_miss) begin
+                state_next = ST_SEND;
+            end
+            else begin
+                state_next = ST_IDLE;
+            end
+        end
+        ST_SEND : begin
+            if (arvalid && arready) begin
+                state_next = ST_GET;
+            end
+        end
+        ST_GET : begin
+            if (rlast) begin
+                state_next = ST_IDLE;
+            end
+            else if (find_miss) begin
+                state_next = ST_SEND;
+            end
+        end
+        default: 
+    endcase
+end
+always @(posedge clk) begin
+    if (!resetn) begin
+        state_reg <= ST_IDLE;
+    end
+    else begin
+        state_reg <= state_next;
+    end
+end
+
+//inst store
+reg  [31:0] first_addr;
+reg  [31:0] inst_buff [3:0];
+reg         value     [3:0];
+reg  [1:0]  i;
+
+reg  [31:0] req_inst_addr;
+
+always @(posedge clk) begin
+    if (state_next == ST_SRCH) begin
+        req_inst_addr <= inst_addr;
+    end
+end
+
+/*------------------------*/
+wire find_inst = (first_addr[31:4] == req_inst_addr[31:4]) && value[req_inst_addr[3:2]];
+assign find_miss = !find_inst;
+assign inst_rdata = inst_buff[req_inst_addr[3:2]];
+
+always @(posedge clk) begin
+    if (state_next == ST_SEND) begin
+        first_addr <= req_inst_addr;
+    end
+end
+
+always @(posedge clk) begin
+    if (!resetn) begin
+        i        <= 2'b0;
+    end
+    else if 
+    else if (rvalid && rready) begin
+        inst_buff[i] <= rdata;
+        i            <= i + 1'b1;
+    end
+end
+
+
 
 endmodule
 
