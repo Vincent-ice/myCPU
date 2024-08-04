@@ -92,6 +92,7 @@ module Cache(
     input  logic         RVALID,
     output logic         RREADY
     );
+
 parameter  INCRLEN=15;//inst read len
 
 //寄存器堆
@@ -110,7 +111,7 @@ logic datastore=0;
 logic Icachewrite=0;
 logic Dcachewrite=0;
 
-logic [31:0] Icollected_data[INCRLEN:0];// I收集的8个数据
+logic [31:0] Icollected_data[INCRLEN:0];// I收集的数据
 logic        Idata_ready;             // 数据收集完成标志
 logic [31:0] Dcollected_data;       // D收集的数据
 logic        Ddata_ready;             // 数据收集完成标志
@@ -127,8 +128,86 @@ logic         dcache_wvalid=0;
 logic         icache_ready;
 logic         dcache_ready;
 
-//用于单周期ok
-logic ICachehit = 0;
+
+//读取仲裁信号
+    logic icache_selected;
+    logic dcache_selected;
+
+
+
+//读axi总线
+    // 寄存器用于保存地址和数据
+    logic [31:0] raddress;
+    logic [7:0]  rburst_len;
+    logic [1:0]  rburst;
+    
+// 读axi状态机状态
+    typedef enum logic [1:0] {
+        RIDLE,        // 空闲状态
+        RADDR_PHASE,  // 地址阶段
+        RDATA_PHASE,   // 数据阶段
+        RSTALL
+    } state_r;
+    state_r rstate, rnext_state;
+
+// 读地址通道信号
+    assign ARID    = 4'b0000; // 示例ID
+    assign ARADDR  = raddress;
+    assign ARLEN   = rburst_len;
+    assign ARSIZE  = 3'b010; // 4字节（32位）
+    assign ARBURST = rburst; // INCR突发
+    assign ARLOCK  = 1'b0;
+    assign ARCACHE = 4'b0000; // 普通非缓存可缓冲
+    assign ARPROT  = 3'b000;
+    assign ARQOS   = 4'b0000;
+    assign ARVALID = (rstate == RADDR_PHASE);
+
+// 读数据通道信号
+    assign RREADY  = (rstate == RDATA_PHASE);
+
+//读axi中IDcache的有效信号
+  logic DVALID;
+  logic IVALID;
+  logic [INCRLEN:0] counter;
+
+
+
+
+//写axi总线
+//写入axi寄存器，用于保存地址和数据
+    logic [31:0] address;
+    logic [31:0] data;
+// 状态机状态
+    typedef enum logic [1:0] {
+        IDLE,        // 空闲状态
+        ADDR_PHASE,  // 地址阶段
+        DATA_PHASE,  // 数据阶段
+        RESP_PHASE   // 响应阶段
+    } state_w;
+
+    state_w wstate, wnext_state;
+
+// 写地址通道信号
+    assign AWID    = 4'b0000; // 示例ID
+    assign AWADDR  = address;
+    assign AWLEN   = 0;
+    assign AWSIZE  = 3'b010; // 4字节（32位） 
+    assign AWBURST = 2'b00; // 不突发
+    assign AWLOCK  = 1'b0;
+    assign AWCACHE = 4'b0011; // 普通非缓存可缓冲
+    assign AWPROT  = 3'b000;
+    assign AWQOS   = 4'b0000;
+    assign AWVALID = (wstate == ADDR_PHASE);
+
+// 写数据通道信号
+    assign WDATA   = data;
+    assign WSTRB   = Dcache_size==2'd0 ? 4'b0001<<Dcache_size[1:0] :
+                      Dcache_size==2'd1 ? 4'b0011<<Dcache_size[1:0] : 4'b1111; // 所有字节均有效
+    assign WLAST   = 1;
+    assign WVALID  = (wstate == DATA_PHASE);
+
+// 写响应通道信号
+    assign BREADY  = (wstate == RESP_PHASE);
 
 
 
@@ -145,7 +224,7 @@ logic ICachehit = 0;
     Cache_line DCache [1023:0];
 
 
-    //设定cache偏移、索引、标签
+//设定cache偏移、索引、标签
     logic [1:0]  IOffset;
     logic [9:0]  IIndex;
     logic [19:0] ITag;
@@ -161,23 +240,7 @@ logic ICachehit = 0;
     assign   DIndex  =   Dcache_addr[11:2];
     assign   DTag    =   Dcache_addr[31:12];
 
-    //cache初始化
-    always_ff @(posedge clk) begin 
-      if (!resetn) begin
-        for (int i = 0;i<1024;i++) begin
-            ICache[i].valid      <=0;
-            ICache[i].CacheTag   <=0;
-            ICache[i].CacheData   <=0;
-            DCache[i].valid      <=0;
-            DCache[i].CacheTag   <=0;
-            DCache[i].CacheData   <=0;
-        end
-        inst_sram_addr_ok       <=0;
-        inst_sram_data_ok       <=0;
-        data_sram_addr_ok       <=0;
-        data_sram_data_ok       <=0;
-      end
-    end
+
 
 //cache状态
 typedef enum logic [1:0] {
@@ -196,51 +259,40 @@ typedef enum logic [1:0] {
 } state_D;
 state_D D_state,D_next_state;
 
-//cache状态机状态转换    
+
+
+//**********************************************时序模块*************************************************//
 always_ff @(posedge clk) begin
-  if (!resetn) begin
-    I_state<=I_IDLE;
-    D_state<=D_IDLE;
-  end
-  else
-  I_state<=I_next_state;
-  D_state<=D_next_state;
-end
+  //cache初始化 
+      if (!resetn) begin
+        for (int i = 0;i<1024;i++) begin
+            ICache[i].valid      <=0;
+            ICache[i].CacheTag   <=0;
+            ICache[i].CacheData   <=0;
+            DCache[i].valid      <=0;
+            DCache[i].CacheTag   <=0;
+            DCache[i].CacheData   <=0;
+        end
+        inst_sram_addr_ok       <=0;
+        inst_sram_data_ok       <=0;
+        data_sram_addr_ok       <=0;
+        data_sram_data_ok       <=0;
+      end
 
 
-//Icache状态转换
-always_comb begin
-  I_next_state=I_state;
-case (I_state)
-  I_IDLE: begin
-    if (inst_sram_req&&inst_sram_addr_ok) begin
-      I_next_state=I_DATA;
-    end    
-  end 
-
-  I_DATA:begin
-   if (ICache[IIndex].valid && ICache[IIndex].CacheTag==ITag) begin
-    I_next_state=I_IDLE;
-   end
-   else if (ICacheMiss) begin
-    I_next_state=I_MEM_READ;
-   end    
-  end
-
-  I_MEM_READ: begin
-    if (Idata_ready) begin
-    I_next_state=I_UPDATE_CACHE;
+  //cache状态机状态转换
+    if (!resetn) begin
+      I_state<=I_IDLE;
+      D_state<=D_IDLE;
+      end
+    else begin
+      I_state<=I_next_state;
+      D_state<=D_next_state;
     end
-  end
-  I_UPDATE_CACHE:begin
-        I_next_state=I_IDLE;
-  end
-  default: I_next_state=I_IDLE;
-endcase
-end
-//Icache数据操作
-always_ff @(posedge clk)begin
-    case (I_state)
+
+
+  //Icache数据操作
+  case (I_state)
     I_IDLE:begin
     Icachewrite<=0;
     inst_sram_data_ok<=0;
@@ -280,45 +332,10 @@ always_ff @(posedge clk)begin
       inst_sram_rdata<=Icollected_data[0];
       inst_sram_data_ok<=1;
     end
-    endcase
-end
+  endcase
 
 
-//Dcache状态转换
-always_comb begin
-  D_next_state=D_state;
-case (D_state)
-  D_IDLE: begin
-    if (data_sram_req) begin
-      D_next_state=D_DATA;
-    end    
-  end 
-
-  D_DATA:begin
-   if (DCache[DIndex].valid && DCache[DIndex].CacheTag==DTag) begin
-    D_next_state=D_IDLE;
-   end
-   else if (DCacheMiss) begin
-    D_next_state=D_MEM_READ;
-   end
-   if (Dcache_wr) begin
-      D_next_state=D_IDLE;
-   end  
-  end
-
-  D_MEM_READ: begin
-    if (Ddata_ready) begin
-    D_next_state=D_UPDATE_CACHE;
-    end
-  end
-  D_UPDATE_CACHE:begin
-        D_next_state=D_IDLE;
-  end
-  default: D_next_state=D_IDLE;
-endcase
-end
-
-always_ff @(posedge clk)begin
+  //Dcache数据操作
 case (D_state)
     D_IDLE: begin
         data_sram_data_ok<=0;
@@ -408,15 +425,9 @@ case (D_state)
       data_sram_rdata<=Dcollected_data;
       data_sram_data_ok<=1;
     end
-endcase    
-end
+endcase
 
-  //读取仲裁信号
-    logic icache_selected;
-    logic dcache_selected;
-
-    // 仲裁逻辑
-    always_ff @(posedge clk) begin
+  // 仲裁逻辑
         if (!resetn) begin
             icache_selected <= 1'b0;
             dcache_selected <= 1'b0;
@@ -436,60 +447,105 @@ end
                 dcache_selected <= 1'b0;
             end
         end
-    end
 
 
-
-
-    //写axi总线
-
-    //写入axi寄存器，用于保存地址和数据
-    logic [31:0] address;
-    logic [31:0] data;
-    // 状态机状态
-    typedef enum logic [1:0] {
-        IDLE,        // 空闲状态
-        ADDR_PHASE,  // 地址阶段
-        DATA_PHASE,  // 数据阶段
-        RESP_PHASE   // 响应阶段
-    } state_w;
-
-    state_w wstate, wnext_state;
-
-    // 写地址通道信号
-    assign AWID    = 4'b0000; // 示例ID
-    assign AWADDR  = address;
-    assign AWLEN   = 0;
-    assign AWSIZE  = 3'b010; // 4字节（32位） 
-    assign AWBURST = 2'b00; // 不突发
-    assign AWLOCK  = 1'b0;
-    assign AWCACHE = 4'b0011; // 普通非缓存可缓冲
-    assign AWPROT  = 3'b000;
-    assign AWQOS   = 4'b0000;
-    assign AWVALID = (wstate == ADDR_PHASE);
-
-    // 写数据通道信号
-    assign WDATA   = data;
-    assign WSTRB   = Dcache_size==2'd0 ? 4'b0001<<Dcache_size[1:0] :
-                      Dcache_size==2'd1 ? 4'b0011<<Dcache_size[1:0] : 4'b1111; // 所有字节均有效
-    assign WLAST   = 1;
-    assign WVALID  = (wstate == DATA_PHASE);
-
-    // 写响应通道信号
-    assign BREADY  = (wstate == RESP_PHASE);
-
-
-        // 状态机
-    always_ff @(posedge clk) begin
+  // 写axi状态机
         if (!resetn) begin
             wstate <= IDLE;
         end else begin
             wstate <= wnext_state;
         end
-    end
 
-    always_comb begin
-        wnext_state = wstate;
+
+  // 读axi状态机
+        if (!resetn) begin
+            rstate <= RIDLE;
+            counter<=0;
+        end else begin
+            rstate <= rnext_state;
+            if (rstate == RSTALL) begin
+              counter<=0;
+            end
+            if (rstate == RDATA_PHASE && RVALID && IVALID) begin
+            Icollected_data[counter]<=RDATA;
+            counter<=counter+1;
+            end
+            if (rstate == RDATA_PHASE && RVALID && DVALID) begin
+            Dcollected_data<=RDATA;
+            end
+  end
+
+end
+
+
+
+//********************************************组合模块*******************************************************//
+always_comb begin
+//Icache状态转换
+  I_next_state=I_state;
+case (I_state)
+  I_IDLE: begin
+    if (inst_sram_req&&inst_sram_addr_ok) begin
+      I_next_state=I_DATA;
+    end    
+  end 
+
+  I_DATA:begin
+   if (ICache[IIndex].valid && ICache[IIndex].CacheTag==ITag) begin
+    I_next_state=I_IDLE;
+   end
+   else if (ICacheMiss) begin
+    I_next_state=I_MEM_READ;
+   end    
+  end
+
+  I_MEM_READ: begin
+    if (Idata_ready) begin
+    I_next_state=I_UPDATE_CACHE;
+    end
+  end
+  I_UPDATE_CACHE:begin
+        I_next_state=I_IDLE;
+  end
+  default: I_next_state=I_IDLE;
+endcase
+
+
+//Dcache状态转换
+  D_next_state=D_state;
+case (D_state)
+  D_IDLE: begin
+    if (data_sram_req) begin
+      D_next_state=D_DATA;
+    end    
+  end 
+
+  D_DATA:begin
+   if (DCache[DIndex].valid && DCache[DIndex].CacheTag==DTag) begin
+    D_next_state=D_IDLE;
+   end
+   else if (DCacheMiss) begin
+    D_next_state=D_MEM_READ;
+   end
+   if (Dcache_wr) begin
+      D_next_state=D_IDLE;
+   end  
+  end
+
+  D_MEM_READ: begin
+    if (Ddata_ready) begin
+    D_next_state=D_UPDATE_CACHE;
+    end
+  end
+  D_UPDATE_CACHE:begin
+        D_next_state=D_IDLE;
+  end
+  default: D_next_state=D_IDLE;
+endcase
+
+
+//写axi状态转换
+wnext_state = wstate;
         case (wstate)
             IDLE: begin
                 if (dcache_wvalid) begin
@@ -514,69 +570,8 @@ end
                 end
             end
         endcase
-    end
 
-
-//读axi总线
-
-    // 寄存器用于保存地址和数据
-    logic [31:0] raddress;
-    logic [7:0]  rburst_len;
-    logic [1:0]  rburst;
-
-    // 读axi状态机状态
-    typedef enum logic [1:0] {
-        RIDLE,        // 空闲状态
-        RADDR_PHASE,  // 地址阶段
-        RDATA_PHASE,   // 数据阶段
-        RSTALL
-    } state_r;
-    state_r rstate, rnext_state;
-
-        // 读地址通道信号
-    assign ARID    = 4'b0000; // 示例ID
-    assign ARADDR  = raddress;
-    assign ARLEN   = rburst_len;
-    assign ARSIZE  = 3'b010; // 4字节（32位）
-    assign ARBURST = rburst; // INCR突发
-    assign ARLOCK  = 1'b0;
-    assign ARCACHE = 4'b0000; // 普通非缓存可缓冲
-    assign ARPROT  = 3'b000;
-    assign ARQOS   = 4'b0000;
-    assign ARVALID = (rstate == RADDR_PHASE);
-
-    // 读数据通道信号
-    assign RREADY  = (rstate == RDATA_PHASE);
-
-
-    //有效信号
-  logic DVALID;
-  logic IVALID;
-  logic [INCRLEN:0] counter;
-
-     // 状态机
-    always_ff @(posedge clk) begin
-        if (!resetn) begin
-            rstate <= RIDLE;
-            counter<=0;
-        end else begin
-            rstate <= rnext_state;
-            if (rstate == RSTALL) begin
-              counter<=0;
-            end
-            if (rstate == RDATA_PHASE && RVALID && IVALID) begin
-            Icollected_data[counter]<=RDATA;
-            counter<=counter+1;
-            end
-            if (rstate == RDATA_PHASE && RVALID && DVALID) begin
-            Dcollected_data<=RDATA;
-            end
-        end
-    end
-
-
-
-    always_comb begin
+//读axi状态转换
         rnext_state = rstate;
         Idata_ready = 1'b0;
         Ddata_ready =1'b0;  
@@ -621,7 +616,20 @@ end
               rnext_state = RIDLE;
             end
         endcase
-    end
+
+end
+
+
+
+
+
+
+
+
+
+
+
+
 
 endmodule
 
