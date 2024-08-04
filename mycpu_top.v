@@ -58,14 +58,13 @@ wire [`pDD_BUS_Wid-1:0]         pDD_BUS;
 wire                            DE_valid;
 wire [`DE_BUS_Wid-1:0]          DE_BUS;
 wire [`predict_BUS_Wid-1:0]     predict_BUS;
-wire [`Branch_BUS_Wid-1:0]      Branch_BUS;
+wire [`Branch_BUS_Wid-1:0]      Branch_BUS_D;
+wire [`Branch_BUS_Wid-1:0]      Branch_BUS_E;
 wire                            EM_valid;
 wire [`EM_BUS_Wid-1:0]          EM_BUS;
 wire                            MW_valid;
 wire [`MW_BUS_Wid-1:0]          MW_BUS;
 wire [`ED_for_BUS_Wid-1:0]      ED_for_BUS;
-wire [13:0]                     csr_raddr_forward;
-wire [31:0]                     csr_rdata_forward;
 wire [`MD_for_BUS_Wid-1:0]      MD_for_BUS;
 wire [`Wrf_BUS_Wid-1:0]         Wrf_BUS;
 wire [`Wcsr_BUS_Wid-1:0]        Wcsr_BUS;
@@ -83,7 +82,9 @@ wire [31:0]                     ex_entryPC;
 wire                            ertn_flush;
 wire [31:0]                     new_pc;
 
-wire                            predict_error;
+wire                            BTB_stall;
+wire                            predict_error_D;
+wire                            predict_error_E;
 wire [ 7:0]                     hardware_interrupt;
 assign hardware_interrupt = ext_int;
 //assign hardware_interrupt = 8'b0;
@@ -108,67 +109,65 @@ wire                            data_sram_addr_ok;
 wire                            data_sram_data_ok;
 wire                            data_sram_wr;
 
-cpu_axi_interface u_cpu_axi_interface(
+Cache u_cpu_axi_interface(
     .clk          (aclk              ),
     .resetn       (aresetn           ),
 
-    .inst_req     (inst_sram_req     ),
-    .inst_wr      (inst_sram_wr      ),
-    .inst_size    (inst_sram_size    ),
-    .inst_addr    (inst_sram_addr    ),
-    .inst_wdata   (inst_sram_wdata   ),
-    .inst_rdata   (inst_sram_rdata   ),
-    .inst_addr_ok (inst_sram_addr_ok ),
-    .inst_data_ok (inst_sram_data_ok ),
+    .inst_sram_req     (inst_sram_req     ),
+    .inst_sram_size    (inst_sram_size    ),
+    .inst_sram_addr    (inst_sram_addr    ),
+    .inst_sram_rdata   (inst_sram_rdata   ),
+    .inst_sram_addr_ok (inst_sram_addr_ok ),
+    .inst_sram_data_ok (inst_sram_data_ok ),
 
-    .data_req     (data_sram_req     ),
-    .data_wr      (data_sram_wr      ),
-    .data_size    (data_sram_size    ),
-    .data_addr    (data_sram_addr    ),
-    .data_wdata   (data_sram_wdata   ),
-    .data_rdata   (data_sram_rdata   ),
-    .data_addr_ok (data_sram_addr_ok ),
-    .data_data_ok (data_sram_data_ok ),
+    .data_sram_req     (data_sram_req     ),
+    .data_sram_wr      (data_sram_wr      ),
+    .data_sram_size    (data_sram_size    ),
+    .data_sram_wstrb   (data_sram_wstrb   ),
+    .data_sram_addr    (data_sram_addr    ),
+    .data_sram_wdata   (data_sram_wdata   ),
+    .data_sram_rdata   (data_sram_rdata   ),
+    .data_sram_addr_ok (data_sram_addr_ok ),
+    .data_sram_data_ok (data_sram_data_ok ),
 
-    .arid         (arid          ),
-    .araddr       (araddr        ),
-    .arlen        (arlen         ),
-    .arsize       (arsize        ),
-    .arburst      (arburst       ),
-    .arlock       (arlock        ),
-    .arcache      (arcache       ),
-    .arprot       (arprot        ),
-    .arvalid      (arvalid       ),
-    .arready      (arready       ),
+    .ARID         (arid          ),
+    .ARADDR       (araddr        ),
+    .ARLEN        (arlen         ),
+    .ARSIZE       (arsize        ),
+    .ARBURST      (arburst       ),
+    .ARLOCK       (arlock        ),
+    .ARCACHE      (arcache       ),
+    .ARPROT       (arprot        ),
+    .ARVALID      (arvalid       ),
+    .ARREADY      (arready       ),
 
-    .rid          (rid           ),
-    .rdata        (rdata         ),
-    .rresp        (rresp         ),
-    .rlast        (rlast         ),
-    .rvalid       (rvalid        ),
-    .rready       (rready        ),
+    .RID          (rid           ),
+    .RDATA        (rdata         ),
+    .RRESP        (rresp         ),
+    .RLAST        (rlast         ),
+    .RVALID       (rvalid        ),
+    .RREADY       (rready        ),
 
-    .awid         (awid          ),
-    .awaddr       (awaddr        ),
-    .awlen        (awlen         ),
-    .awsize       (awsize        ),
-    .awburst      (awburst       ),
-    .awlock       (awlock        ),
-    .awcache      (awcache       ),
-    .awprot       (awprot        ),
-    .awvalid      (awvalid       ),
-    .awready      (awready       ),
+    .AWID         (awid          ),
+    .AWADDR       (awaddr        ),
+    .AWLEN        (awlen         ),
+    .AWSIZE       (awsize        ),
+    .AWBURST      (awburst       ),
+    .AWLOCK       (awlock        ),
+    .AWCACHE      (awcache       ),
+    .AWPROT       (awprot        ),
+    .AWVALID      (awvalid       ),
+    .AWREADY      (awready       ),
 
-    .wid          (wid           ),
-    .wdata        (wdata         ),
-    .wstrb        (wstrb         ),
-    .wlast        (wlast         ),
-    .wvalid       (wvalid        ),
-    .wready       (wready        ),
-    .bid          (bid           ),
-    .bresp        (bresp         ),
-    .bvalid       (bvalid        ),
-    .bready       (bready        )
+    .WDATA        (wdata         ),
+    .WSTRB        (wstrb         ),
+    .WLAST        (wlast         ),
+    .WVALID       (wvalid        ),
+    .WREADY       (wready        ),
+    .BID          (bid           ),
+    .BRESP        (bresp         ),
+    .BVALID       (bvalid        ),
+    .BREADY       (bready        )
 );
 
 
@@ -176,14 +175,15 @@ Fetch u_Fetch(
     .clk             (aclk             ),
     .rstn            (aresetn          ),
     .predict_BUS     (predict_BUS     ),
-    .Branch_BUS      (Branch_BUS      ),
-    .predict_error   (predict_error   ),
+    .Branch_BUS_D    (Branch_BUS_D    ),
+    .Branch_BUS_E    (Branch_BUS_E    ),
     .ex_D            (ex_D            ),
     .ex_E            (ex_E            ),
     .ex_en_i         (ex_en           ),
     .ex_entryPC      (ex_entryPC      ),
     .ertn_flush_i    (ertn_flush      ),
     .new_pc          (new_pc          ),
+    .BTB_stall       (BTB_stall       ),
     .pD_allowin      (pD_allowin      ),
     .FpD_valid       (FpD_valid       ),
     .FpD_BUS         (FpD_BUS         ),
@@ -209,7 +209,9 @@ preDecode u_preDecode(
     .pD_allowin      (pD_allowin      ),
     .predict_BUS     (predict_BUS     ),
     .PB_BUS          (PB_BUS          ),
-    .predict_error   (predict_error   ),
+    .BTB_stall       (BTB_stall       ),
+    .predict_error_D (predict_error_D ),
+    .predict_error_E (predict_error_E ),
     .ertn_flush      (ertn_flush      ),
     .ex_D            (ex_D            ),
     .ex_E            (ex_E            ),
@@ -230,9 +232,10 @@ Decode u_Decode(
     .Wcsr_BUS           (Wcsr_BUS           ),
     .DE_valid           (DE_valid           ),
     .DE_BUS             (DE_BUS             ),
-    .csr_raddr_forward  (csr_raddr_forward  ),
-    .csr_rdata_forward  (csr_rdata_forward  ),
-    .predict_error      (predict_error      ),
+    .BTB_stall_i        (BTB_stall          ),
+    .predict_error_D    (predict_error_D    ),
+    .predict_error_E    (predict_error_E    ),
+    .Branch_BUS_D       (Branch_BUS_D       ),
     .ex_D               (ex_D               ),
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
@@ -250,12 +253,10 @@ Excute u_Excute(
     .EM_valid        (EM_valid        ),
     .EM_BUS          (EM_BUS          ),
     .ED_for_BUS      (ED_for_BUS      ),
-    .csr_raddr_forward(csr_raddr_forward),
-    .csr_rdata_forward(csr_rdata_forward),
     .ex_E            (ex_E            ),
     .ex_en           (ex_en           ),
-    .predict_error   (predict_error   ),
-    .Branch_BUS      (Branch_BUS      ),
+    .predict_error_E (predict_error_E ),
+    .Branch_BUS_E    (Branch_BUS_E    ),
     .data_sram_req    (data_sram_req    ),
     .data_sram_wr     (data_sram_wr     ),
     .data_sram_size   (data_sram_size   ),
