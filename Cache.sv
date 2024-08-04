@@ -92,7 +92,7 @@ module Cache(
     input  logic         RVALID,
     output logic         RREADY
     );
-parameter  INCRLEN=7;//inst read len
+parameter  INCRLEN=15;//inst read len
 
 //寄存器堆
 logic [31:0] Icache_addr;
@@ -213,7 +213,7 @@ always_comb begin
   I_next_state=I_state;
 case (I_state)
   I_IDLE: begin
-    if (inst_sram_req) begin
+    if (inst_sram_req&&inst_sram_addr_ok) begin
       I_next_state=I_DATA;
     end    
   end 
@@ -246,14 +246,15 @@ always_ff @(posedge clk)begin
     inst_sram_data_ok<=0;
     I_Cache_updated<=0;
     Icache_addr<=0;    
-    if (inst_sram_req) begin
-        Icache_addr<=inst_sram_addr;
-        Icache_size<=inst_sram_size;  
-        inst_sram_addr_ok<=1;
-    end        
+    if (inst_sram_req && inst_sram_addr_ok) begin
+      Icache_addr<=inst_sram_addr;
+      Icache_size<=inst_sram_size;
+      inst_sram_addr_ok<=0;   
+    end else if (inst_sram_req) begin
+      inst_sram_addr_ok<=1;
+    end          
     end
     I_DATA:begin
-        inst_sram_addr_ok<=0;
         if (ICache[IIndex].valid && ICache[IIndex].CacheTag==ITag) begin
         inst_sram_rdata<=ICache[IIndex].CacheData;
         inst_sram_data_ok<=1;
