@@ -419,7 +419,7 @@ always @(*) begin
 endcase
 end
 
-assign new_pc = era_pc;
+assign new_pc = csr_value;
 
 //branch manage
 wire [31:0] br_base;

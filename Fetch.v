@@ -168,14 +168,14 @@ end
 
 //PC
 assign pc_en   = F_allowin && !ex_F && !send_handshake;
-always @(*) begin
+always @(posedge clk) begin
     case (1'b1)
-        TLBR_en & has_ex: pc_next = TLBR_entryPC;
-        ex_en & has_ex: pc_next = ex_entryPC;
-        br_taken_buff : pc_next = br_target_buff;
-        has_ex        : pc_next = ex_entryPC;
-        ertn_flush    : pc_next = new_pc;
-        default       : pc_next = pc_plus4;
+        TLBR_en_i | TLBR_en: pc_next <= TLBR_entryPC;
+        ex_en_i | ex_en : pc_next <= ex_entryPC;
+        br_taken_buff   : pc_next <= br_target_buff;
+        has_ex          : pc_next <= ex_entryPC;
+        ertn_flush      : pc_next <= new_pc;
+        default         : pc_next <= pc_plus4;
     endcase
 end
 /* assign pc_next = br_taken   ? br_target                        :
@@ -187,6 +187,7 @@ end
 always @(posedge clk) begin
     if(!rstn)begin
         pc_reg <= 32'h1bff_fffc;
+        //seq_pc <= 32'h1c00_0000;
     end else if (F_valid_next && F_allowin) begin
         pc_reg <= pc_next;
     end

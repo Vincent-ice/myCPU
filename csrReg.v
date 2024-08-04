@@ -26,7 +26,7 @@ module csrReg (
     output                      has_int,
     output [ 7:0]               int_ecode,
 
-    output [31:0]               new_pc,
+    output reg [31:0]           new_pc,
     output [31:0]               ex_entryPC,
     output [31:0]               TLBR_entryPC,
 
@@ -358,11 +358,17 @@ always @(posedge clk) begin
     end
 end
 
-assign new_pc = in_ex &&
-                (`CSR_ESTAT_ECODE == `ECODE_SYS ||
-                 `CSR_ESTAT_ECODE == `ECODE_BRK ||
-                 `CSR_ESTAT_ECODE == `ECODE_INE ||
-                 `CSR_ESTAT_ECODE == `ECODE_INT)  ? csr_ERA + 32'd4 : csr_ERA;
+always @(posedge clk) begin
+    if (in_ex) begin
+        case (`CSR_ESTAT_ECODE)
+            `ECODE_SYS : new_pc <= csr_ERA + 32'd4;
+            `ECODE_BRK : new_pc <= csr_ERA + 32'd4;
+            `ECODE_INE : new_pc <= csr_ERA + 32'd4;
+            `ECODE_INT : new_pc <= csr_ERA + 32'd4;
+            default    : new_pc <= csr_ERA;
+        endcase
+    end
+end
 
 //BADV
 wire va_error = (ecode == `ECODE_ALE ) ||

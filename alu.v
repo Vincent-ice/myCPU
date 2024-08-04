@@ -6,7 +6,7 @@ module alu(
 (*max_fanout = 20*)  input  wire [31:0] alu_src1,
 (*max_fanout = 20*)  input  wire [31:0] alu_src2,
   output reg  [31:0] alu_result,
-  output wire        stall
+  output reg         stall
 );
  
 wire op_add;   //add operation
@@ -205,12 +205,14 @@ assign div_history_find = |find_buff;
 
 reg [31:0] find_rem;
 reg [31:0] find_quo;
-always @(*) begin
-  case (1'b1)
+always @(posedge clk) begin
+  if (div_history_find) begin
+    case (1'b1)
     find_buff[0] : begin find_rem = rem_history[0]; find_quo = quo_history[0]; end
     find_buff[1] : begin find_rem = rem_history[1]; find_quo = quo_history[1]; end
     default      : begin find_rem = 32'b0         ; find_quo = 32'b0         ; end
   endcase
+  end
 end
 
 assign rem_result = dividend_is_0    ? 32'b0    :
@@ -218,8 +220,26 @@ assign rem_result = dividend_is_0    ? 32'b0    :
 assign quo_result = dividend_is_0    ? 32'b0    :
                     div_history_find ? find_quo : quo;
 
-// stall signal
-assign stall = mult_stall | div_stall;
+reg  div_op_delay;
+always @(posedge clk) begin
+  if (!rstn) begin
+    div_op_delay <= 1'b0;
+  end
+  else begin
+    div_op_delay <= div_go;
+  end
+end
+wire div_find_stall = div_go & ~div_op_delay;
+
+// stall 
+always @(*) begin
+  case (1'b1)
+    mult_stall : stall = 1'b1;
+    div_stall  : stall = 1'b1;
+    div_find_stall : stall = 1'b1; 
+    default    : stall = 1'b0;
+  endcase
+end
 
 // final result mux
 always @(*) begin
