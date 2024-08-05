@@ -470,6 +470,14 @@ reg  [31:0] rf_data      [dataNUM-1:0];
 reg  [$clog2(dataNUM)-1:0] tag;
 (*max_fanout = 20*)wire [15:0] find_buff;
 wire [3:0]  find_index;
+wire [31:0] write_data;
+generate
+    genvar k;
+    for (k = 0;k < 4;k=k+1) begin
+        assign write_data[k*8+7:k*8] = data_wstrb[k] ? data_wdata[k*8+7:k*8] : rf_data[find_index][k*8+7:k*8];
+    end
+endgenerate
+
 
 integer n = 0;
 always @(posedge clk) begin
@@ -482,9 +490,9 @@ always @(posedge clk) begin
   end
   else if (D_state_reg == ST_D_SC) begin
     if (|find_buff) begin
-        rf_data[find_index] <= wdata_data;
+        rf_data[find_index] <= write_data;
     end
-    else begin
+    else if (data_size == 2'd2) begin
         tag              <= tag+1;
         rf_data_addr[tag]<= data_addr;
         rf_data[tag]     <= wdata_data;
@@ -504,7 +512,7 @@ end
 generate
   genvar j;
   for (j = 0; j < dataNUM; j = j + 1) begin
-    assign find_buff[j] = (&(rf_data_addr[j] ^ (~req_data_addr)));
+    assign find_buff[j] = (&(rf_data_addr[j][31:2] ^ (~req_data_addr[31:2])));
   end
 endgenerate
 assign D_find_miss = (D_state_reg == ST_D_SRCH) && !(|find_buff);
