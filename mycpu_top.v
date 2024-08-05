@@ -126,6 +126,7 @@ cpu_axi_interface u_cpu_axi_interface(
     .data_size    (data_sram_size    ),
     .data_addr    (data_sram_addr    ),
     .data_wdata   (data_sram_wdata   ),
+    .data_wstrb   (data_sram_wstrb   ),
     .data_rdata   (data_sram_rdata   ),
     .data_addr_ok (data_sram_addr_ok ),
     .data_data_ok (data_sram_data_ok ),
