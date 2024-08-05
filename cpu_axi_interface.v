@@ -162,9 +162,55 @@ reg  [ 3:0] wstrb_data;
 //                 wvalid&&wready ? 1'b1 :
 //                 data_back      ? 1'b0 : wdata_rcv;
 //end
+localparam ST_AR_IDLE = 3'b001;
+localparam ST_AR_INST = 3'b010;
+localparam ST_AR_DATA = 3'b100;
+reg [2:0] ar_state_reg;
+reg [2:0] ar_state_next;
+always @(*) begin
+    case (ar_state_reg)
+        ST_AR_IDLE : begin
+            if (arvalid_inst) begin
+                ar_state_next = ST_AR_INST;
+            end
+            else if (arvalid_data) begin
+                ar_state_next = ST_AR_DATA;
+            end
+            else begin
+                ar_state_next = ST_AR_IDLE;
+            end
+        end
+        ST_AR_INST : begin
+            if (arready) begin
+                ar_state_next = ST_AR_IDLE;
+            end
+            else begin
+                ar_state_next = ST_AR_INST;
+            end
+        end
+        ST_AR_DATA : begin
+            if (arready) begin
+                ar_state_next = ST_AR_IDLE;
+            end
+            else begin
+                ar_state_next = ST_AR_DATA;
+            end
+        end
+        default   : ar_state_next = ST_AR_IDLE;
+    endcase
+end
+always @(posedge clk) begin
+    if (!resetn) begin
+        ar_state_reg <= ST_AR_IDLE;
+    end
+    else begin
+        ar_state_reg <= ar_state_next;
+    end
+end
+
 //ar
 always @(*) begin
-    if (arvalid_inst && !arvalid_data) begin
+    if ((ar_state_reg == ST_AR_INST) || (ar_state_next == ST_AR_INST)) begin
         arid   = {2'b01,arid_inst,1'b0};
         araddr = {req_inst_addr[31:4],4'b0};
         arlen  = 8'd3;
@@ -175,7 +221,7 @@ always @(*) begin
         arprot = 3'd0;
         arvalid= arvalid_inst;
     end
-    else begin
+    else if ((ar_state_reg == ST_AR_DATA) || (ar_state_next == ST_AR_DATA)) begin
         arid   = 4'b1000;
         araddr = {req_data_addr[31:2],2'b0};
         arlen  = 8'd0;
@@ -185,6 +231,17 @@ always @(*) begin
         arcache= 4'd0;
         arprot = 3'd0;
         arvalid= arvalid_data;
+    end
+    else begin
+        arid   = 4'b0;
+        araddr = 32'b0;
+        arlen  = 8'd0;
+        arsize = 3'd0;
+        arburst= 2'd0;
+        arlock = 2'd0;
+        arcache= 4'd0;
+        arprot = 3'd0;
+        arvalid= 1'b0;
     end
 end
 //r
