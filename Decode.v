@@ -82,7 +82,7 @@ always @(posedge clk) begin
         D_valid <= 1'b0;
     end
     else if (D_allowin) begin
-        D_valid <= pDD_valid && (!ex_flag && !ex_D) && !predict_error;
+        D_valid <= pDD_valid && (!ex_flag && !ex_D) && !predict_error && !ertn_flush;
     end
 end
 
@@ -396,7 +396,7 @@ always @(*) begin
 endcase
 end
 
-assign new_pc = era_pc;
+assign new_pc = csr_value;
 
 //branch manage
 wire [31:0] br_base;

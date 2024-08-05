@@ -515,7 +515,7 @@ generate
     assign find_buff[j] = (&(rf_data_addr[j][31:2] ^ (~req_data_addr[31:2])));
   end
 endgenerate
-assign D_find_miss = (D_state_reg == ST_D_SRCH) && !(|find_buff);
+assign D_find_miss = (D_state_reg == ST_D_SRCH) /* && !(|find_buff)  */&& 1'b1;
 assign arvalid_data   = (D_state_reg == ST_D_LOAD);
 
 oneHot2Bin u_oneHot2Bin(.oneHot(find_buff),.bin(find_index));

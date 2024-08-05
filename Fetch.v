@@ -12,7 +12,7 @@ module Fetch (
     input                           ex_en_i,
     input    [31:0]                 ex_entryPC,
     input                           ertn_flush_i,
-    input    [31:0]                 new_pc,
+    input    [31:0]                 new_pc_i,
 
     input                           pD_allowin,
     
@@ -137,12 +137,15 @@ always @(posedge clk) begin
 end
 
 //ertn_flush buff
+reg  [31:0] new_pc;
 always @(posedge clk) begin
     if (!rstn) begin
         ertn_flush <= 1'b0;
+        new_pc     <= 32'b0;
     end
     else if (ertn_flush_i) begin
         ertn_flush <= 1'b1;
+        new_pc     <= new_pc_i;
     end
     else if (F_valid_next & F_allowin) begin
         ertn_flush <= 1'b0;

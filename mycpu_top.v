@@ -184,7 +184,7 @@ Fetch u_Fetch(
     .ex_en_i         (ex_en           ),
     .ex_entryPC      (ex_entryPC      ),
     .ertn_flush_i    (ertn_flush      ),
-    .new_pc          (new_pc          ),
+    .new_pc_i        (new_pc          ),
     .pD_allowin      (pD_allowin      ),
     .FpD_valid       (FpD_valid       ),
     .FpD_BUS         (FpD_BUS         ),

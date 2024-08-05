@@ -65,7 +65,7 @@ always @(posedge clk) begin
         pD_valid <= 1'b0;
     end
     else if (pD_allowin) begin
-        pD_valid <= FpD_valid && (!ex_flag && !ex_pD/*  || ex_en */) && !predict_error;
+        pD_valid <= FpD_valid && (!ex_flag && !ex_pD/*  || ex_en */) && !predict_error && !ertn_flush;
     end
 
     

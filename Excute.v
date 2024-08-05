@@ -110,7 +110,7 @@ end
 
 //ALU
 wire [31:0] alu_result_E;
-wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_flag}};
+wire [`alu_op_Wid-1:0] alu_op = alu_op_E & {`alu_op_Wid{!ex_D && !ex_flag}};
 
 alu u_alu(
     .clk          (clk         ),
