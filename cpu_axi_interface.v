@@ -107,13 +107,16 @@ reg [1 :0] do_size_r;
 reg [31:0] do_addr_r;
 reg [31:0] do_wdata_r;
 wire data_back;
+wire       arvalid_inst;
+reg  [31:0] req_inst_addr;
+reg        arid_inst;
 
-assign inst_addr_ok = !do_req&&!data_req;
+//assign inst_addr_ok = !do_req&&!data_req;
 assign data_addr_ok = !do_req;
 always @(posedge clk)
 begin
     do_req     <= !resetn                       ? 1'b0 : 
-                  (inst_req||data_req)&&!do_req ? 1'b1 :
+                  (arvalid_inst||data_req)&&!do_req ? 1'b1 :
                   data_back                     ? 1'b0 : do_req;
     do_req_or  <= !resetn ? 1'b0 : 
                   !do_req ? data_req : do_req_or;
@@ -123,13 +126,13 @@ begin
     do_size_r  <= data_req&&data_addr_ok ? data_size :
                   inst_req&&inst_addr_ok ? inst_size : do_size_r;
     do_addr_r  <= data_req&&data_addr_ok ? data_addr :
-                  inst_req&&inst_addr_ok ? inst_addr : do_addr_r;
+                  arvalid_inst           ? {req_inst_addr[31:4],4'b0} : do_addr_r;
     do_wdata_r <= data_req&&data_addr_ok ? data_wdata :
                   inst_req&&inst_addr_ok ? inst_wdata :do_wdata_r;
 end
 
 //inst sram-like
-assign inst_data_ok = do_req&&!do_req_or&&data_back;
+//assign inst_data_ok = do_req&&!do_req_or&&data_back;
 assign data_data_ok = do_req&& do_req_or&&data_back;
 //assign inst_rdata   = rdata;
 assign data_rdata   = rdata;
@@ -150,11 +153,11 @@ begin
                  data_back      ? 1'b0 : wdata_rcv;
 end
 //ar
-assign arid    = data_req?4'b0001:4'b0000;
+assign arid    = arvalid_inst ? {2'b0,arid_inst,1'b0} : 4'b0000;
 assign araddr  = do_addr_r;
-assign arlen   = 8'd0;
+assign arlen   = arvalid_inst ? 8'd3 : 8'd0;
 assign arsize  = do_size_r;
-assign arburst = 2'd0;
+assign arburst = arvalid_inst ? 2'd1 : 2'd0;
 assign arlock  = 2'd0;
 assign arcache = 4'd0;
 assign arprot  = 3'd0;
@@ -164,9 +167,9 @@ assign rready  = 1'b1;
 
 //aw
 assign awid    = 4'd0001;
-assign awaddr  = do_addr_r;
+assign awaddr  = data_addr;
 assign awlen   = 8'd0;
-assign awsize  = do_size_r;
+assign awsize  = data_size;
 assign awburst = 2'd0;
 assign awlock  = 2'd0;
 assign awcache = 4'd0;
@@ -183,93 +186,150 @@ assign wvalid = do_req&&do_wr_r&&!wdata_rcv;
 assign bready  = 1'b1;
 
 // FSM
-localparam ST_IDLE = 4'b0001;
-localparam ST_SRCH = 4'b0010;
-localparam ST_SEND = 4'b0100;
-localparam ST_GET  = 4'b1000;
-reg [3:0] state_reg;
-reg [3:0] state_next;
-wire      find_miss;
+localparam ST_IDLE = 3'b001;
+localparam ST_SRCH = 3'b010;
+localparam ST_WAIT = 3'b100;
+//localparam ST_IDLE = 3'b001;
+localparam ST_SEND = 3'b010;
+localparam ST_GET  = 3'b100;
 
+reg [2:0] Ig_state_reg;
+reg [2:0] Ig_state_next;
+reg [2:0] Is_state_reg;
+reg [2:0] Is_state_next;
+wire      I_find_miss;
+wire      get_new_inst;
 always @(*) begin
-    case (state_reg)
+    case (Ig_state_reg)
         ST_IDLE : begin
-            if (inst_req && inst_addr_ok) begin
-                state_next = ST_SRCH;
+            if (I_find_miss) begin
+                Ig_state_next = ST_SEND;
             end
             else begin
-                state_next = ST_IDLE;
-            end
-        end
-        ST_SRCH : begin
-            if (find_miss) begin
-                state_next = ST_SEND;
-            end
-            else begin
-                state_next = ST_IDLE;
+                Ig_state_next = ST_IDLE;
             end
         end
         ST_SEND : begin
             if (arvalid && arready) begin
-                state_next = ST_GET;
+                Ig_state_next = ST_GET;
+            end
+            else begin
+                Ig_state_next = ST_SEND;
             end
         end
         ST_GET : begin
-            if (rlast) begin
-                state_next = ST_IDLE;
+            if (I_find_miss) begin
+                Ig_state_next = ST_SEND;
             end
-            else if (find_miss) begin
-                state_next = ST_SEND;
+            else if (rlast) begin
+                Ig_state_next = ST_IDLE;
+            end
+            else begin
+                Ig_state_next = ST_GET;
             end
         end
-        default: 
+        default : Ig_state_next = ST_IDLE;
     endcase
 end
 always @(posedge clk) begin
     if (!resetn) begin
-        state_reg <= ST_IDLE;
+        Ig_state_reg <= ST_IDLE;
     end
     else begin
-        state_reg <= state_next;
+        Ig_state_reg <= Ig_state_next;
+    end
+end
+
+always @(*) begin
+    case (Is_state_reg)
+        ST_IDLE : begin
+            if (inst_req && inst_addr_ok) begin
+                Is_state_next = ST_SRCH;
+            end
+            else begin
+                Is_state_next = ST_IDLE;
+            end
+        end
+        ST_SRCH : begin
+            if (I_find_miss) begin
+                Is_state_next = ST_WAIT;
+            end
+            else if (inst_data_ok) begin
+                Is_state_next = ST_IDLE;
+            end
+            else begin
+                Is_state_next = ST_SRCH;
+            end
+        end
+        ST_WAIT : begin
+            if (get_new_inst) begin
+                Is_state_next = ST_SRCH;
+            end
+            else begin
+                Is_state_next = ST_WAIT;
+            end
+        end
+        default :  Is_state_next = ST_IDLE;
+    endcase
+end
+always @(posedge clk) begin
+    if (!resetn) begin
+        Is_state_reg <= ST_IDLE;
+    end
+    else begin
+        Is_state_reg <= Is_state_next;
     end
 end
 
 //inst store
 reg  [31:0] first_addr;
 reg  [31:0] inst_buff [3:0];
-reg         value     [3:0];
+reg  [3:0]  value;
 reg  [1:0]  i;
 
-reg  [31:0] req_inst_addr;
-
+assign inst_addr_ok = (Is_state_reg == ST_IDLE) & inst_req;
 always @(posedge clk) begin
-    if (state_next == ST_SRCH) begin
+    if (!resetn) begin
+        req_inst_addr <= 32'b0;
+    end
+    else if ((Is_state_next == ST_SRCH)&&(Is_state_reg == ST_IDLE)) begin
         req_inst_addr <= inst_addr;
     end
 end
 
-/*------------------------*/
-wire find_inst = (first_addr[31:4] == req_inst_addr[31:4]) && value[req_inst_addr[3:2]];
-assign find_miss = !find_inst;
+assign I_find_miss  = (Is_state_reg == ST_SRCH) && (first_addr[31:4] != req_inst_addr[31:4]);
+assign inst_data_ok = (Is_state_reg == ST_SRCH) && !I_find_miss && value[req_inst_addr[3:2]];
 assign inst_rdata = inst_buff[req_inst_addr[3:2]];
 
 always @(posedge clk) begin
-    if (state_next == ST_SEND) begin
-        first_addr <= req_inst_addr;
+    if (!resetn) begin
+        first_addr <= 32'b0;
+        arid_inst  <= 1'b0;
+    end
+    else if ((Ig_state_next == ST_SEND)&&(Ig_state_reg != ST_SEND)) begin
+        first_addr <= {req_inst_addr[31:4],4'b0};
+        arid_inst  <= ~arid_inst;
     end
 end
+
+assign arvalid_inst = (Ig_state_reg == ST_SEND);
+assign get_new_inst = (Ig_state_reg == ST_GET);
 
 always @(posedge clk) begin
     if (!resetn) begin
-        i        <= 2'b0;
+        value <= 4'b0;
+        i            <= 2'b0;
     end
-    else if 
-    else if (rvalid && rready) begin
+    else if (Ig_state_next == ST_SEND) begin
+        value <= 4'b0;
+        i            <= 2'b0;
+    end
+    else if (rvalid && rready && (Ig_state_reg == ST_GET) && (rid[1] == arid_inst)) begin
         inst_buff[i] <= rdata;
+        value[i]     <= 1'b1;
         i            <= i + 1'b1;
     end
 end
-
 
 
 endmodule
