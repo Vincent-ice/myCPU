@@ -20,6 +20,7 @@ module tlb
     output wire                      s0_v,
 
     // search port 1 (for load/store)
+    input  wire                      st_inst,
     input  wire [              18:0] s1_vppn,
     input  wire                      s1_va_bit12,
     input  wire [               9:0] s1_asid,
@@ -189,12 +190,12 @@ always @(posedge clk) begin
         tlb_ppn0[w_index]  <= w_ppn0;
         tlb_plv0[w_index]  <= w_plv0;
         tlb_mat0[w_index]  <= w_mat0;
-        tlb_d0[w_index]    <= w_d0;
+        //tlb_d0[w_index]    <= w_d0;
         tlb_v0[w_index]    <= w_v0;
         tlb_ppn1[w_index]  <= w_ppn1;
         tlb_plv1[w_index]  <= w_plv1;
         tlb_mat1[w_index]  <= w_mat1;
-        tlb_d1[w_index]    <= w_d1;
+        //tlb_d1[w_index]    <= w_d1;
         tlb_v1[w_index]    <= w_v1;
     end
 end
@@ -245,5 +246,24 @@ generate for(i3=0; i3<TLBNUM;i3=i3+1) begin
     end
 end
 endgenerate
+
+always @(posedge clk) begin
+    /* if (!rstn) begin
+        tlb_d0 <= 0;
+        tlb_d1 <= 0;
+    end
+    else  */if (st_inst) begin
+        if (s1_choose_bit) begin
+            tlb_d1[s1_index] <= 1'b1;
+        end
+        else begin
+            tlb_d0[s1_index] <= 1'b1;
+        end
+    end
+    else if (we) begin
+        tlb_d0[w_index] <= w_d0;
+        tlb_d1[w_index] <= w_d1;
+    end
+end
 
 endmodule

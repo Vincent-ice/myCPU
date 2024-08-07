@@ -37,6 +37,7 @@ module Excute (
     output                      data_sram_wr,
 
     // search port 1 (for load/store)
+    output wire                      st_inst, //to update dirty bit
     output wire [              18:0] s1_vppn,
     output wire                      s1_va_bit12,
     output wire [               9:0] s1_asid,
@@ -206,7 +207,7 @@ assign s1_va_bit12 = inst_invtlb  ? alu_src2_E[12]    :
                      vaddr[12];
 assign s1_asid     = inst_invtlb  ? alu_src1_E[9:0]   :
                      csr_ASID_ASID;
-
+assign st_inst     = data_sram_req && data_sram_wr;
 
 wire [31:0] tlb_addr = (s1_ps == 6'd12) ? {s1_ppn[19:0], offset[11:0]} :
                                           {s1_ppn[19:10], offset[21:0]};

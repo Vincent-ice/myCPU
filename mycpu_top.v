@@ -130,6 +130,7 @@ wire [                1:0] s0_plv;
 wire [                1:0] s0_mat;
 wire                       s0_d;
 wire                       s0_v;
+wire                       st_inst;
 wire [               18:0] s1_vppn;
 wire                       s1_va_bit12;
 wire [                9:0] s1_asid;
@@ -356,7 +357,19 @@ Excute u_Excute(
     .data_sram_wdata  (data_sram_wdata  ),
     .data_sram_rdata  (data_sram_rdata  ),
     .data_sram_addr_ok(data_sram_addr_ok),
-    .data_sram_data_ok(data_sram_data_ok)
+    .data_sram_data_ok(data_sram_data_ok),
+    .st_inst         (st_inst         ),
+    .s1_vppn         (s1_vppn         ),
+    .s1_va_bit12     (s1_va_bit12     ),
+    .s1_asid         (s1_asid         ),
+    .s1_found        (s1_found        ),
+    .s1_index        (s1_index        ),
+    .s1_ppn          (s1_ppn          ),
+    .s1_ps           (s1_ps           ),
+    .s1_plv          (s1_plv          ),
+    .s1_mat          (s1_mat          ),
+    .s1_d            (s1_d            ),
+    .s1_v            (s1_v            )
 );
 
 Memory u_Memory(
@@ -447,6 +460,7 @@ tlb #(`TLBNUM) u_tlb(
     .s0_d         (s0_d        ),
     .s0_v         (s0_v        ),
 
+    .st_inst      (st_inst     ),
     .s1_vppn      (s1_vppn     ),
     .s1_va_bit12  (s1_va_bit12 ),
     .s1_asid      (s1_asid     ),
