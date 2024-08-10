@@ -27,7 +27,10 @@ module Decode (
     output                          ex_en,
     output [31:0]                   ex_entryPC,
     output                          ertn_flush,
-    output [31:0]                   new_pc
+    output [31:0]                   new_pc,
+
+    output                          inst_sram_uncache,
+    output                          data_sram_uncache
 );
 
 //pDD BUS
@@ -168,7 +171,7 @@ wire inst_cacop   = op_31_26_d[6'h01] & op_25_22_d[4'h8];
 wire [`alu_op_Wid-1:0] alu_op;
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_b | inst_ld_bu | inst_ld_h | inst_ld_hu | inst_ld_w | 
-                    inst_st_b | inst_st_h | inst_st_w | 
+                    inst_st_b | inst_st_h | inst_st_w | inst_cacop |
                     inst_jirl | inst_bl | inst_pcaddu12i | inst_rdcntid | inst_rdcntvl_w | inst_rdcntvh_w;
 assign alu_op[ 1] = inst_sub_w | inst_beq | inst_bne;
 assign alu_op[ 2] = inst_slt | inst_slti | inst_blt | inst_bge;
@@ -191,7 +194,7 @@ assign alu_op[18] = inst_mod_wu;
 
 //dataflow control manage
 wire need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui |
+wire need_si12  =  inst_addi_w | inst_ld_w | inst_st_w | inst_slti | inst_sltui | inst_cacop |
                    inst_ld_b | inst_ld_h | inst_ld_bu | inst_ld_hu | inst_st_b | inst_st_h;
 wire need_si12u =  inst_andi | inst_ori | inst_xori;
 wire need_si16  =  inst_jirl | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
@@ -235,7 +238,8 @@ wire   src2_is_imm   = inst_slli_w |
                        inst_sltui  |
                        inst_andi   |
                        inst_ori    |
-                       inst_xori   ;
+                       inst_xori   |
+                       inst_cacop  ;
 wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
                            inst_ld_b  ? 4'b0001 :
                            inst_ld_bu ? 4'b0101 :
@@ -244,7 +248,7 @@ wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
 wire       res_from_csr  = inst_csrrd | inst_csrwr | inst_csrxchg;
 wire       dst_is_r1     = inst_bl;
 wire       gr_we         = ~inst_st_w & ~inst_st_b & ~inst_st_h & ~inst_beq  & ~inst_bne & ~inst_b & D_valid & 
-                           ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu & !inst_cacop;
+                           ~inst_ertn & ~inst_blt  & ~inst_bge  & ~inst_bltu & ~inst_bgeu & ~inst_cacop;
 wire [3:0] mem_we        = inst_st_w ? 4'b1111 :
                            inst_st_b ? 4'b0001 :
                            inst_st_h ? 4'b0011 : 4'b0000;
@@ -379,8 +383,13 @@ csrReg u_csrReg(
     .ex_entryPC(ex_entryPC),
     .counter   (counter   ),
     .counterID (counterID ),
-    .counter_shift(counter_shift)
+    .counter_shift(counter_shift),
+    .csr_CRMD_DATF(csr_CRMD_DATF),
+    .csr_CRMD_DATM(csr_CRMD_DATM)
 );
+
+assign inst_sram_uncache = (csr_CRMD_DATF == 2'b0) && 1'b0;
+assign data_sram_uncache = (csr_CRMD_DATM == 2'b0);
 
     //forward manage
 wire        csr_forward_E = csr_we_E && (&(csr_addr_E ^ (~csr_addr)));

@@ -31,7 +31,10 @@ module csrReg (
 
     output [63:0]               counter,
     output [31:0]               counterID,
-    output [63:0]               counter_shift
+    output [63:0]               counter_shift,
+
+    output [ 1:0]               csr_CRMD_DATF,
+    output [ 1:0]               csr_CRMD_DATM
 );
 
 //csr register
@@ -211,6 +214,8 @@ always @(posedge clk ) begin
         csr_CRMD[8:0] <= csr_wdata[8:0];
     end
 end
+assign csr_CRMD_DATF = `CSR_CRMD_DATF;
+assign csr_CRMD_DATM = `CSR_CRMD_DATM;
 
 //PRMD
 always @(posedge clk ) begin

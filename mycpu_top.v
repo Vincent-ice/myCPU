@@ -94,6 +94,7 @@ wire [ 7:0]                     hardware_interrupt;
 assign hardware_interrupt = intrpt;
 //assign hardware_interrupt = 8'b0;
 
+wire                            inst_sram_uncache;
 wire                            inst_sram_req;
 wire [ 3:0]                     inst_sram_wstrb;
 wire [31:0]                     inst_sram_addr;
@@ -104,6 +105,7 @@ wire                            inst_sram_addr_ok;
 wire                            inst_sram_data_ok;
 wire                            inst_sram_wr;
 
+wire                            data_sram_uncache;
 wire                            data_sram_req;
 wire [ 3:0]                     data_sram_wstrb;
 wire [31:0]                     data_sram_addr;
@@ -118,6 +120,7 @@ Cache u_cpu_axi_interface(
     .clk          (aclk              ),
     .resetn       (aresetn           ),
 
+    .inst_sram_uncache (inst_sram_uncache ),
     .inst_sram_req     (inst_sram_req     ),
     .inst_sram_size    (inst_sram_size    ),
     .inst_sram_addr    (inst_sram_addr    ),
@@ -125,6 +128,7 @@ Cache u_cpu_axi_interface(
     .inst_sram_addr_ok (inst_sram_addr_ok ),
     .inst_sram_data_ok (inst_sram_data_ok ),
 
+    .data_sram_uncache (data_sram_uncache ),
     .data_sram_req     (data_sram_req     ),
     .data_sram_wr      (data_sram_wr      ),
     .data_sram_size    (data_sram_size    ),
@@ -241,7 +245,9 @@ Decode u_Decode(
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
     .ertn_flush         (ertn_flush         ),
-    .new_pc             (new_pc             )
+    .new_pc             (new_pc             ),
+    .inst_sram_uncache  (inst_sram_uncache  ),
+    .data_sram_uncache  (data_sram_uncache  )
 );
 
 Excute u_Excute(
@@ -294,10 +300,10 @@ Writeback u_Writeback(
     .Wcsr_BUS          (Wcsr_BUS          ),
     .PB_BUS            (PB_BUS            ),
     .ex_en             (ex_en             ),
-    .debug_wb_pc       (debug_wb_pc       ),
-    .debug_wb_rf_we    (debug_wb_rf_we    ),
-    .debug_wb_rf_wnum  (debug_wb_rf_wnum  ),
-    .debug_wb_rf_wdata (debug_wb_rf_wdata )
+    .debug_wb_pc       (debug0_wb_pc      ),
+    .debug_wb_rf_we    (debug0_wb_rf_wen  ),
+    .debug_wb_rf_wnum  (debug0_wb_rf_wnum ),
+    .debug_wb_rf_wdata (debug0_wb_rf_wdata)
 );
 
 

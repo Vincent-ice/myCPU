@@ -26,6 +26,7 @@ module Cache(
 
 
     //inst sram
+    input logic         inst_sram_uncache,
     input logic         inst_sram_req,
     input logic [1:0]   inst_sram_size,
     input logic [31:0]  inst_sram_addr,
@@ -34,6 +35,7 @@ module Cache(
     output logic [31:0] inst_sram_rdata,
 
     //data sram
+    input  logic         data_sram_uncache,
     input  logic         data_sram_req,
     input  logic         data_sram_wr,
     input  logic [1:0]   data_sram_size,
@@ -161,7 +163,7 @@ logic ICachehit = 0;
     assign   DIndex  =   Dcache_addr[11:2];
     assign   DTag    =   Dcache_addr[31:12];
 
-    //cache初始化
+/*     //cache初始化
     always_ff @(posedge clk) begin 
       if (!resetn) begin
         for (int i = 0;i<1024;i++) begin
@@ -177,7 +179,7 @@ logic ICachehit = 0;
         data_sram_addr_ok       <=0;
         data_sram_data_ok       <=0;
       end
-    end
+    end */
 
 //cache状态
 typedef enum logic [1:0] {
@@ -219,10 +221,10 @@ case (I_state)
   end 
 
   I_DATA:begin
-   if (ICache[IIndex].valid && ICache[IIndex].CacheTag==ITag) begin
+   if (ICache[IIndex].valid && ICache[IIndex].CacheTag==ITag && !inst_sram_uncache) begin
     I_next_state=I_IDLE;
    end
-   else if (ICacheMiss) begin
+   else if (ICacheMiss || inst_sram_uncache) begin
     I_next_state=I_MEM_READ;
    end    
   end
@@ -240,6 +242,16 @@ endcase
 end
 //Icache数据操作
 always_ff @(posedge clk)begin
+  if (!resetn) begin
+    for (int i = 0;i < 1024;i++) begin
+      ICache[i].valid      <=0;
+      ICache[i].CacheTag   <=0;
+      ICache[i].CacheData  <=0;
+    end
+    inst_sram_addr_ok<=0;
+    inst_sram_data_ok<=0;
+  end
+  else begin
     case (I_state)
     I_IDLE:begin
     Icachewrite<=0;
@@ -281,6 +293,7 @@ always_ff @(posedge clk)begin
       inst_sram_data_ok<=1;
     end
     endcase
+  end
 end
 
 
@@ -295,10 +308,10 @@ case (D_state)
   end 
 
   D_DATA:begin
-   if (DCache[DIndex].valid && DCache[DIndex].CacheTag==DTag) begin
+   if (DCache[DIndex].valid && DCache[DIndex].CacheTag==DTag && !data_sram_uncache) begin
     D_next_state=D_IDLE;
    end
-   else if (DCacheMiss) begin
+   else if (DCacheMiss || data_sram_uncache) begin
     D_next_state=D_MEM_READ;
    end
    if (Dcache_wr) begin
@@ -319,6 +332,16 @@ endcase
 end
 
 always_ff @(posedge clk)begin
+  if (!resetn) begin
+    for (int i = 0;i < 1024;i++) begin
+      DCache[i].valid      <=0;
+      DCache[i].CacheTag   <=0;
+      DCache[i].CacheData  <=0;
+    end
+    data_sram_addr_ok<=0;
+    data_sram_data_ok<=0;
+  end
+  else begin
 case (D_state)
     D_IDLE: begin
         data_sram_data_ok<=0;
@@ -408,7 +431,8 @@ case (D_state)
       data_sram_rdata<=Dcollected_data;
       data_sram_data_ok<=1;
     end
-endcase    
+endcase  
+  end  
 end
 
   //读取仲裁信号
