@@ -1,6 +1,6 @@
 `include "Defines.vh"
-module mycpu_top(
-    input  wire [7:0]  ext_int ,
+module core_top(
+    input  wire [7:0]  intrpt  ,
     input  wire        aclk    ,
     input  wire        aresetn ,
 
@@ -44,11 +44,17 @@ module mycpu_top(
     input  wire [1 :0] bresp  ,
     input  wire        bvalid ,
     output wire        bready ,
+//debug
+    input           break_point,
+    input           infor_flag,
+    input  [ 4:0]   reg_num,
+    output          ws_valid,
+    output [31:0]   rf_rdata,
     // trace debug interface
-    output wire [31:0] debug_wb_pc,
-    output wire [ 3:0] debug_wb_rf_we,
-    output wire [ 4:0] debug_wb_rf_wnum,
-    output wire [31:0] debug_wb_rf_wdata
+    output wire [31:0] debug0_wb_pc,
+    output wire [ 3:0] debug0_wb_rf_wen,
+    output wire [ 4:0] debug0_wb_rf_wnum,
+    output wire [31:0] debug0_wb_rf_wdata
 );
 
 wire                            FpD_valid;
@@ -85,9 +91,10 @@ wire [31:0]                     new_pc;
 
 wire                            predict_error;
 wire [ 7:0]                     hardware_interrupt;
-assign hardware_interrupt = ext_int;
+assign hardware_interrupt = intrpt;
 //assign hardware_interrupt = 8'b0;
 
+wire                            inst_sram_uncache;
 wire                            inst_sram_req;
 wire [ 3:0]                     inst_sram_wstrb;
 wire [31:0]                     inst_sram_addr;
@@ -98,6 +105,7 @@ wire                            inst_sram_addr_ok;
 wire                            inst_sram_data_ok;
 wire                            inst_sram_wr;
 
+wire                            data_sram_uncache;
 wire                            data_sram_req;
 wire [ 3:0]                     data_sram_wstrb;
 wire [31:0]                     data_sram_addr;
@@ -112,6 +120,7 @@ cpu_axi_interface u_cpu_axi_interface(
     .clk          (aclk              ),
     .resetn       (aresetn           ),
 
+    .inst_uncache (inst_sram_uncache ),
     .inst_req     (inst_sram_req     ),
     .inst_wr      (inst_sram_wr      ),
     .inst_size    (inst_sram_size    ),
@@ -121,6 +130,7 @@ cpu_axi_interface u_cpu_axi_interface(
     .inst_addr_ok (inst_sram_addr_ok ),
     .inst_data_ok (inst_sram_data_ok ),
 
+    .data_uncache (data_sram_uncache ),
     .data_req     (data_sram_req     ),
     .data_wr      (data_sram_wr      ),
     .data_size    (data_sram_size    ),
@@ -238,7 +248,9 @@ Decode u_Decode(
     .ex_en              (ex_en              ),
     .ex_entryPC         (ex_entryPC         ),
     .ertn_flush         (ertn_flush         ),
-    .new_pc             (new_pc             )
+    .new_pc             (new_pc             ),
+    .inst_sram_uncache  (inst_sram_uncache  ),
+    .data_sram_uncache  (data_sram_uncache  )
 );
 
 Excute u_Excute(
@@ -291,10 +303,10 @@ Writeback u_Writeback(
     .Wcsr_BUS          (Wcsr_BUS          ),
     .PB_BUS            (PB_BUS            ),
     .ex_en             (ex_en             ),
-    .debug_wb_pc       (debug_wb_pc       ),
-    .debug_wb_rf_we    (debug_wb_rf_we    ),
-    .debug_wb_rf_wnum  (debug_wb_rf_wnum  ),
-    .debug_wb_rf_wdata (debug_wb_rf_wdata )
+    .debug_wb_pc       (debug0_wb_pc      ),
+    .debug_wb_rf_we    (debug0_wb_rf_wen  ),
+    .debug_wb_rf_wnum  (debug0_wb_rf_wnum ),
+    .debug_wb_rf_wdata (debug0_wb_rf_wdata)
 );
 
 

@@ -37,6 +37,7 @@ module cpu_axi_interface
     input         resetn, 
 
     //inst sram-like 
+    input         inst_uncache ,
     input         inst_req     ,
     input         inst_wr      ,
     input  [1 :0] inst_size    ,
@@ -47,6 +48,7 @@ module cpu_axi_interface
     output        inst_data_ok ,
     
     //data sram-like 
+    input         data_uncache ,
     input         data_req     ,
     input         data_wr      ,
     input  [1 :0] data_size    ,
@@ -219,10 +221,9 @@ always @(*) begin
         arlock = 2'd0;
         arcache= 4'd0;
         arprot = 3'd0;
-        arvalid= arvalid_inst;
     end
     else if ((ar_state_reg == ST_AR_DATA) || (ar_state_next == ST_AR_DATA)) begin
-        arid   = 4'b1000;
+        arid   = 4'b0001;
         araddr = {req_data_addr[31:2],2'b0};
         arlen  = 8'd0;
         arsize = 3'd2;
@@ -230,7 +231,6 @@ always @(*) begin
         arlock = 2'd0;
         arcache= 4'd0;
         arprot = 3'd0;
-        arvalid= arvalid_data;
     end
     else begin
         arid   = 4'b0;
@@ -241,7 +241,17 @@ always @(*) begin
         arlock = 2'd0;
         arcache= 4'd0;
         arprot = 3'd0;
-        arvalid= 1'b0;
+    end
+end
+always @(*) begin
+    if (ar_state_reg == ST_AR_INST) begin
+        arvalid = arvalid_inst;
+    end
+    else if (ar_state_reg == ST_AR_DATA) begin
+        arvalid = arvalid_data;
+    end
+    else begin
+        arvalid = 1'b0;
     end
 end
 //r
@@ -378,7 +388,7 @@ always @(posedge clk) begin
     end
 end
 
-assign I_find_miss  = (Is_state_reg == ST_SRCH) && (first_addr[31:4] != req_inst_addr[31:4]);
+assign I_find_miss  = (Is_state_reg == ST_SRCH) && (first_addr[31:4] != req_inst_addr[31:4]) || inst_uncache;
 assign inst_data_ok = (Is_state_reg == ST_SRCH) && !I_find_miss && value[req_inst_addr[3:2]];
 assign inst_rdata = inst_buff[req_inst_addr[3:2]];
 
@@ -450,7 +460,7 @@ always @(*) begin
             end
         end
         ST_D_LOAD : begin
-            if (arvalid && arready && (arid == 4'b1000)) begin
+            if (arvalid && arready && (arid == 4'b0001)) begin
                 D_state_next = ST_D_GET;
             end
             else begin
@@ -458,7 +468,7 @@ always @(*) begin
             end
         end
         ST_D_GET : begin
-            if (rlast && (rid == 4'b1000)) begin
+            if (rlast && (rid == 4'b0001)) begin
                 D_state_next = ST_D_IDLE;
             end
             else begin
@@ -572,7 +582,7 @@ generate
     assign find_buff[j] = (&(rf_data_addr[j][31:2] ^ (~req_data_addr[31:2])));
   end
 endgenerate
-assign D_find_miss = (D_state_reg == ST_D_SRCH) /* && !(|find_buff)  */&& 1'b1;
+assign D_find_miss = (D_state_reg == ST_D_SRCH) && !(|find_buff) || data_uncache;
 assign arvalid_data   = (D_state_reg == ST_D_LOAD);
 
 oneHot2Bin u_oneHot2Bin(.oneHot(find_buff),.bin(find_index));
@@ -582,7 +592,7 @@ always @(*) begin
     case (D_state_reg)
         ST_D_SRCH : data_data_ok = !D_find_miss;
         ST_D_WAIT : data_data_ok = bvalid && bready;
-        ST_D_GET  : data_data_ok = rlast && (rid == 4'b1000);
+        ST_D_GET  : data_data_ok = rlast && (rid == 4'b0001);
         default   : data_data_ok = 1'b0;
     endcase
 end
