@@ -205,12 +205,18 @@ assign div_history_find = |find_buff;
 
 reg [31:0] find_rem;
 reg [31:0] find_quo;
-always @(*) begin
-  case (1'b1)
-    find_buff[0] : begin find_rem = rem_history[0]; find_quo = quo_history[0]; end
-    find_buff[1] : begin find_rem = rem_history[1]; find_quo = quo_history[1]; end
-    default      : begin find_rem = 32'b0         ; find_quo = 32'b0         ; end
-  endcase
+always @(posedge clk) begin
+  if (!rstn) begin
+    find_rem <= 32'b0;
+    find_quo <= 32'b0;
+  end
+  else begin
+    case (1'b1)
+      find_buff[0] : begin find_rem <= rem_history[0]; find_quo <= quo_history[0]; end
+      find_buff[1] : begin find_rem <= rem_history[1]; find_quo <= quo_history[1]; end
+      default      : begin find_rem <= 32'b0         ; find_quo <= 32'b0         ; end
+    endcase
+  end
 end
 
 assign rem_result = dividend_is_0    ? 32'b0    :
@@ -218,8 +224,20 @@ assign rem_result = dividend_is_0    ? 32'b0    :
 assign quo_result = dividend_is_0    ? 32'b0    :
                     div_history_find ? find_quo : quo;
 
+wire div_find_stall;
+reg  div_find_stall_delay;
+always @(posedge clk) begin
+    if (!rstn) begin
+        div_find_stall_delay <= 1'b0;
+    end
+    else begin
+        div_find_stall_delay <= div_find_stall;
+    end
+end
+assign div_find_stall = (div_history_find) ^ div_find_stall_delay;
+
 // stall signal
-assign stall = mult_stall | div_stall;
+assign stall = mult_stall | div_stall | div_find_stall;
 
 // final result mux
 always @(*) begin
