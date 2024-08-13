@@ -52,7 +52,7 @@ module core_top(
     output [31:0]   rf_rdata,
     // trace debug interface
     output wire [31:0] debug0_wb_pc,
-    output wire [ 3:0] debug0_wb_rf_we,
+    output wire [ 3:0] debug0_wb_rf_wen,
     output wire [ 4:0] debug0_wb_rf_wnum,
     output wire [31:0] debug0_wb_rf_wdata
 );
@@ -304,7 +304,7 @@ Writeback u_Writeback(
     .PB_BUS            (PB_BUS            ),
     .ex_en             (ex_en             ),
     .debug_wb_pc       (debug0_wb_pc      ),
-    .debug_wb_rf_we    (debug0_wb_rf_we   ),
+    .debug_wb_rf_we    (debug0_wb_rf_wen  ),
     .debug_wb_rf_wnum  (debug0_wb_rf_wnum ),
     .debug_wb_rf_wdata (debug0_wb_rf_wdata)
 );
