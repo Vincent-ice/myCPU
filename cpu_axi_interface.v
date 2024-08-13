@@ -102,6 +102,20 @@ module cpu_axi_interface
     input         bvalid       ,
     output        bready       
 );
+localparam ST_IDLE = 3'b001;
+localparam ST_SRCH = 3'b010;
+localparam ST_WAIT = 3'b100;
+//localparam ST_IDLE = 3'b001;
+localparam ST_SEND = 3'b010;
+localparam ST_GET  = 3'b100;
+
+localparam ST_D_IDLE = 4'b0001;
+localparam ST_D_SRCH = 4'b0011;
+localparam ST_D_SC   = 4'b0010; //send aw
+localparam ST_D_LOAD = 4'b0101; //load data
+localparam ST_D_SD   = 4'b0100; //send w
+localparam ST_D_GET  = 4'b1001; //get data
+localparam ST_D_WAIT = 4'b1000; //wait for b
 //addr
 //reg do_req;
 //reg do_req_or; //req is inst or data;1:data,0:inst
@@ -123,6 +137,8 @@ wire        wvalid_data;
 reg  [31:0] wdata_data;
 reg  [ 3:0] wstrb_data;
 
+reg  [2:0] Ig_state_reg;
+reg  [3:0] D_state_reg;
 //assign inst_addr_ok = !do_req&&!data_req;
 //assign data_addr_ok = !do_req;
 //always @(posedge clk)
@@ -226,7 +242,7 @@ always @(*) begin
         arid   = 4'b0001;
         araddr = {req_data_addr[31:2],2'b0};
         arlen  = 8'd0;
-        arsize = 3'd2;
+        arsize = req_data_size;
         arburst= 2'd0;
         arlock = 2'd0;
         arcache= 4'd0;
@@ -277,14 +293,6 @@ assign wvalid = wvalid_data;
 assign bready  = 1'b1;
 
 // FSM
-localparam ST_IDLE = 3'b001;
-localparam ST_SRCH = 3'b010;
-localparam ST_WAIT = 3'b100;
-//localparam ST_IDLE = 3'b001;
-localparam ST_SEND = 3'b010;
-localparam ST_GET  = 3'b100;
-
-reg [2:0] Ig_state_reg;
 reg [2:0] Ig_state_next;
 reg [2:0] Is_state_reg;
 reg [2:0] Is_state_next;
@@ -481,14 +489,6 @@ always @(posedge clk) begin
 end
 
 //data store
-localparam ST_D_IDLE = 4'b0001;
-localparam ST_D_SRCH = 4'b0011;
-localparam ST_D_SC   = 4'b0010; //send aw
-localparam ST_D_LOAD = 4'b0101; //load data
-localparam ST_D_SD   = 4'b0100; //send w
-localparam ST_D_GET  = 4'b1001; //get data
-localparam ST_D_WAIT = 4'b1000; //wait for b
-reg  [3:0] D_state_reg;
 reg  [3:0] D_state_next;
 wire       D_find_miss;
 
