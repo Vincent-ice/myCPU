@@ -112,7 +112,7 @@ module cpu_axi_interface
 //wire       data_back;
 wire        arvalid_inst;
 reg  [31:0] req_inst_addr;
-reg         arid_inst;
+reg  [ 3:0] arid_inst;
 reg  [31:0] req_data_addr;
 reg  [ 1:0] req_data_size;
 wire        arvalid_data;
@@ -213,7 +213,7 @@ end
 //ar
 always @(*) begin
     if ((ar_state_reg == ST_AR_INST) || (ar_state_next == ST_AR_INST)) begin
-        arid   = {2'b01,arid_inst,1'b0};
+        arid   = arid_inst;
         araddr = {req_inst_addr[31:4],4'b0};
         arlen  = 8'd3;
         arsize = 3'd2;
@@ -255,7 +255,7 @@ always @(*) begin
     end
 end
 //r
-assign rready  = 1'b1;
+assign rready  = (Ig_state_reg == ST_GET) || (D_state_reg == ST_D_GET);
 
 //aw
 assign awid    = 4'd0001;
@@ -290,10 +290,15 @@ reg [2:0] Is_state_reg;
 reg [2:0] Is_state_next;
 wire      I_find_miss;
 wire      get_new_inst;
+
+localparam inst_id0 = 4'b0100;
+localparam inst_id1 = 4'b0110;
+reg       id0_busy,id1_busy;
+
 always @(*) begin
     case (Ig_state_reg)
         ST_IDLE : begin
-            if (I_find_miss) begin
+            if (I_find_miss && !(id0_busy && id1_busy)) begin
                 Ig_state_next = ST_SEND;
             end
             else begin
@@ -301,7 +306,7 @@ always @(*) begin
             end
         end
         ST_SEND : begin
-            if (arvalid && arready && (arid == {2'b01,arid_inst,1'b0})) begin
+            if (arvalid && arready && (arid == arid_inst)) begin
                 Ig_state_next = ST_GET;
             end
             else begin
@@ -309,10 +314,10 @@ always @(*) begin
             end
         end
         ST_GET : begin
-            if (I_find_miss) begin
+            if (I_find_miss && !(id0_busy && id1_busy)) begin
                 Ig_state_next = ST_SEND;
             end
-            else if (rlast && (rid == {2'b01,arid_inst,1'b0})) begin
+            else if (!(id0_busy || id1_busy)) begin
                 Ig_state_next = ST_IDLE;
             end
             else begin
@@ -373,10 +378,14 @@ always @(posedge clk) begin
 end
 
 //inst store
-reg  [31:0] first_addr;
-reg  [31:0] inst_buff [3:0];
-reg  [3:0]  value;
-reg  [1:0]  i;
+reg  [31:0] first_addr0;
+reg  [31:0] inst_buff0 [3:0];
+reg  [3:0]  value0;
+reg  [1:0]  i0;
+reg  [31:0] first_addr1;
+reg  [31:0] inst_buff1 [3:0];
+reg  [3:0]  value1;
+reg  [1:0]  i1;
 
 assign inst_addr_ok = (Is_state_reg == ST_IDLE) & inst_req;
 always @(posedge clk) begin
@@ -388,40 +397,88 @@ always @(posedge clk) begin
     end
 end
 
-assign I_find_miss  = (Is_state_reg == ST_SRCH) && (first_addr[31:4] != req_inst_addr[31:4]) || inst_uncache;
-assign inst_data_ok = (Is_state_reg == ST_SRCH) && !I_find_miss && value[req_inst_addr[3:2]];
-assign inst_rdata = inst_buff[req_inst_addr[3:2]];
+wire   I0_find      = (first_addr0[31:4] == req_inst_addr[31:4]);
+wire   I1_find      = (first_addr1[31:4] == req_inst_addr[31:4]);
+assign I_find_miss  = (Is_state_reg == ST_SRCH) && !(I0_find || I1_find) || inst_uncache;
+assign inst_data_ok = (Is_state_reg == ST_SRCH) && !I_find_miss &&
+                      (I0_find && value0[req_inst_addr[3:2]] || I1_find && value1[req_inst_addr[3:2]]);
+assign inst_rdata   = I0_find ? inst_buff0[req_inst_addr[3:2]] : inst_buff1[req_inst_addr[3:2]];
 
 always @(posedge clk) begin
     if (!resetn) begin
-        first_addr <= 32'b0;
-        arid_inst  <= 1'b0;
+        first_addr0 <= 32'b0;
+        first_addr1 <= 32'b0;
+        arid_inst   <= 4'b0;
     end
     else if ((Ig_state_next == ST_SEND)&&(Ig_state_reg != ST_SEND)) begin
-        first_addr <= {req_inst_addr[31:4],4'b0};
-        arid_inst  <= ~arid_inst;
+        if (!id0_busy) begin
+            first_addr0 <= {req_inst_addr[31:4],4'b0};
+            arid_inst   <= inst_id0;
+        end
+        else if (!id1_busy) begin
+            first_addr1 <= {req_inst_addr[31:4],4'b0};
+            arid_inst   <= inst_id1;
+        end
     end
 end
 
 assign arvalid_inst = (Ig_state_reg == ST_SEND);
 assign get_new_inst = (Ig_state_reg == ST_GET);
-
+//inst get logic
 always @(posedge clk) begin
     if (!resetn) begin
-        value <= 4'b0;
-        i            <= 2'b0;
+        value0        <= 4'b0;
+        i0            <= 2'b0;
     end
-    else if (Ig_state_next == ST_SEND) begin
-        value <= 4'b0;
-        i            <= 2'b0;
+    else if ((Ig_state_next == ST_SEND)&&(Ig_state_reg != ST_SEND)&&(!id0_busy)) begin
+        value0        <= 4'b0;
+        i0            <= 2'b0;
     end
-    else if (rvalid && rready && (Ig_state_reg == ST_GET) && (rid == {2'b01,arid_inst,1'b0})) begin
-        inst_buff[i] <= rdata;
-        value[i]     <= 1'b1;
-        i            <= i + 1'b1;
+    else if (rvalid && rready && (Ig_state_reg == ST_GET)&&(rid == inst_id0)) begin
+        inst_buff0[i0] <= rdata;
+        value0[i0]     <= 1'b1;
+        i0             <= i0 + 1'b1;
+    end
+end
+always @(posedge clk) begin
+    if (!resetn) begin
+        value1        <= 4'b0;
+        i1            <= 2'b0;
+    end
+    else if ((Ig_state_next == ST_SEND)&&(Ig_state_reg != ST_SEND)&&(id0_busy)&&(!id1_busy)) begin
+        value1        <= 4'b0;
+        i1            <= 2'b0;
+    end
+    else if (rvalid && rready && (Ig_state_reg == ST_GET)&&(rid == inst_id1)) begin
+        inst_buff1[i1] <= rdata;
+        value1[i1]     <= 1'b1;
+        i1             <= i1 + 1'b1;
     end
 end
 
+//id busy flag
+always @(posedge clk) begin
+    if (!resetn) begin
+        id0_busy <= 1'b0;
+    end
+    else if (rvalid  && rready  && (rid  == inst_id0) && rlast) begin
+        id0_busy <= 1'b0;
+    end
+    else if (arvalid && arready && (arid == inst_id0)) begin
+        id0_busy <= 1'b1;
+    end
+end
+always @(posedge clk) begin
+    if (!resetn) begin
+        id1_busy <= 1'b0;
+    end
+    else if (rvalid  && rready  && (rid  == inst_id1) && rlast) begin
+        id1_busy <= 1'b0;
+    end
+    else if (arvalid && arready && (arid == inst_id1)) begin
+        id1_busy <= 1'b1;
+    end
+end
 
 //data store
 localparam ST_D_IDLE = 4'b0001;
