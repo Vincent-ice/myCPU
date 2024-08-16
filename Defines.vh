@@ -12,7 +12,7 @@
 `define ED_for_BUS_Wid  4+5+32+1+14+32+32
 `define MD_for_BUS_Wid  5+32+1+14+32+32
 
-`define alu_op_Wid      19
+`define alu_op_Wid      20
 
 `define TLBNUM          16
 

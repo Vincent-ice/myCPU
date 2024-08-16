@@ -100,6 +100,7 @@ wire [11:0] i12 = inst_D[21:10];
 wire [19:0] i20 = inst_D[24: 5];
 wire [15:0] i16 = inst_D[25:10];
 wire [25:0] i26 = {inst_D[ 9: 0], inst_D[25:10]};
+wire [10:0] i11 = inst_D[25:15];
 
 wire [15:0] op_25_22_d;
 wire [ 3:0] op_21_20_d;
@@ -162,6 +163,8 @@ wire inst_rdcntvl_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & 
 wire inst_rdcntvh_w = op_31_26_d[6'h00] & op_25_22_d[4'h0] & op_21_20_d[2'h0] & op_19_15_d[5'h00] & op_14_10_d[5'h19] & (rj==5'b00);
 
 wire inst_cacop   = op_31_26_d[6'h01] & op_25_22_d[4'h8];
+
+wire inst_rriwinz = op_31_26_d[6'h30];
 /* don't forget add the inst to the wire 'unknownInst' at last */
 
 //alu_op manage
@@ -188,6 +191,7 @@ assign alu_op[15] = inst_div_w;
 assign alu_op[16] = inst_mod_w;
 assign alu_op[17] = inst_div_wu;
 assign alu_op[18] = inst_mod_wu;
+assign alu_op[19] = inst_rriwinz;
 
 //dataflow control manage
 wire need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
@@ -197,6 +201,7 @@ wire need_si12u =  inst_andi | inst_ori | inst_xori;
 wire need_si16  =  inst_jirl | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
 wire need_si20  =  inst_lu12i_w | inst_pcaddu12i;
 wire need_si26  =  inst_b | inst_bl;
+wire need_si11  =  inst_rriwinz;
 wire src2_is_4  =  inst_jirl | inst_bl;
 
 
@@ -207,6 +212,7 @@ always @(*) begin
         need_si20 : imm = {i20[19:0], 12'b0};
         need_si12u: imm = {20'b0, i12[11:0]};
         need_si16 : imm = {{14{i16[15]}}, i16, 2'b0};
+        need_si11 : imm = {{21{i11[10]}}, i11[10:0]};
         default   : imm = {{20{i12[11]}}, i12[11:0]}; //need_ui5 || need_si12
     endcase
 end
@@ -235,7 +241,8 @@ wire   src2_is_imm   = inst_slli_w |
                        inst_sltui  |
                        inst_andi   |
                        inst_ori    |
-                       inst_xori   ;
+                       inst_xori   |
+                       inst_rriwinz;
 wire [3:0] res_from_mem  = inst_ld_w  ? 4'b1111 :
                            inst_ld_b  ? 4'b0001 :
                            inst_ld_bu ? 4'b0101 :
@@ -417,6 +424,47 @@ assign br_offs = b_inst                          ? b_offs     :
                  inst_jirl                       ? jirl_offs  :
                                                     32'b0;
 
+//rriwinz
+wire [15:0] data [3:0];
+reg  [15:0] data_buff [3:0];
+wire [15:0] data_final;
+assign data[0] = rj_value[15:0];
+assign data[1] = rj_value[31:16];
+assign data[2] = rkd_value[15:0];
+assign data[3] = rkd_value[31:16];
+wire [3:0] data_ld0;
+
+generate
+    genvar i;
+    for (i = 0;i < 4;i = i+1) begin
+        always @(*) begin
+            case (1'b1)
+                data[i][15] : data_buff[i] = 16'hffff;
+                data[i][14] : data_buff[i] = 16'h7fff;
+                data[i][13] : data_buff[i] = 16'h3fff;
+                data[i][12] : data_buff[i] = 16'h1fff;
+                data[i][11] : data_buff[i] = 16'h0fff;
+                data[i][10] : data_buff[i] = 16'h07ff;
+                data[i][ 9] : data_buff[i] = 16'h03ff;
+                data[i][ 8] : data_buff[i] = 16'h01ff;
+                data[i][ 7] : data_buff[i] = 16'h00ff;
+                data[i][ 6] : data_buff[i] = 16'h007f;
+                data[i][ 5] : data_buff[i] = 16'h003f;
+                data[i][ 4] : data_buff[i] = 16'h001f;
+                data[i][ 3] : data_buff[i] = 16'h000f;
+                data[i][ 2] : data_buff[i] = 16'h0007;
+                data[i][ 1] : data_buff[i] = 16'h0003;
+                data[i][ 0] : data_buff[i] = 16'h0001; 
+                default     : data_buff[i] = 16'h0000;
+        endcase
+        end
+    end
+endgenerate
+assign data_final = data_buff[0] & data_buff[1] & data_buff[2] & data_buff[3];
+find_ld_r2 #(16) u_find_ld_r2 (.op(data_final), .pos(data_ld0));
+wire [4:0] data_ld0_final = (data_final == 16'h0000) ? 5'h10 :
+                            (data_final == 16'hffff) ? 5'h0  : {1'b0,data_ld0}+1'b1;
+
 //alu data input manage
 reg  [31:0] alu_src1;
 reg  [31:0] alu_src2;
@@ -426,6 +474,7 @@ always @(*) begin
         inst_rdcntid   : alu_src1 = csr_value;
         inst_rdcntvl_w : alu_src1 = counter[31:0];
         inst_rdcntvh_w : alu_src1 = counter[63:32];
+        inst_rriwinz   : alu_src1 = data_ld0_final;
         default        : alu_src1 = rj_value;
     endcase
 end
@@ -447,7 +496,7 @@ wire       unknownInst = !{|{inst_add_w,inst_sub_w,inst_slt,inst_sltu,inst_nor,i
                              inst_b,inst_bl,inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu,
                              inst_ld_b,inst_ld_h,inst_ld_bu,inst_ld_hu,inst_ld_w,inst_st_b,inst_st_h,inst_st_w,
                              inst_lu12i_w,inst_csrrd,inst_csrwr,inst_csrxchg,inst_ertn,inst_break,inst_syscall,inst_cacop,
-                             inst_rdcntid,inst_rdcntvl_w,inst_rdcntvh_w}};
+                             inst_rdcntid,inst_rdcntvl_w,inst_rdcntvh_w,inst_rriwinz}};
 assign     ex_D    = D_ready_go && !predict_error & (ex_pD | inst_syscall | inst_break | unknownInst | has_int);
 wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      ex_pD        ? ecode_pD   :

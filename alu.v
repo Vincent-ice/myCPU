@@ -28,6 +28,7 @@ wire op_div;   //division signed   quotient
 wire op_divu;  //division unsigned quotient
 wire op_mod;   //division signed   remainder
 wire op_modu;  //division unsigned remainder
+wire op_RRIWINZ; //循环右移
 
 // control code decomposition
 assign op_add  = alu_op[ 0];
@@ -49,6 +50,7 @@ assign op_div  = alu_op[15];
 assign op_mod  = alu_op[16];
 assign op_divu = alu_op[17];
 assign op_modu = alu_op[18];
+assign op_RRIWINZ = alu_op [19];
  
 wire [31:0] add_sub_result;
 wire [31:0] slt_result;
@@ -64,6 +66,7 @@ wire [31:0] sr_result;
 wire [63:0] mul_result;
 wire [31:0] quo_result;
 wire [31:0] rem_result;
+wire [31:0] RRIWINZ_result;
 
 // 32-bit adder
 wire [31:0] adder_a;
@@ -107,6 +110,12 @@ assign sr_result   = sr64_result[31:0];
 // MUL, MULH, MULHU result
 wire [31:0] mul_op1 = op_mul | op_mulh | op_mulhu ? alu_src1 : 32'b0;
 wire [31:0] mul_op2 = op_mul | op_mulh | op_mulhu ? alu_src2 : 32'b0;
+
+
+//RRIWINZ
+assign RRIWINZ_result =alu_src1 ? (alu_src2 >> alu_src1) | (alu_src2 << 32-alu_src1): alu_src2;
+
+
 multCore u_multCore(
   .clk     (clk               ),
   .rstn    (rstn              ),
@@ -243,8 +252,12 @@ always @(*) begin
     op_mod : alu_result = rem_result;
     op_divu: alu_result = quo_result;
     op_modu: alu_result = rem_result;
+    op_RRIWINZ:alu_result=RRIWINZ_result;
     default: alu_result = 32'b0;
   endcase
 end
+
+
+
 
 endmodule
