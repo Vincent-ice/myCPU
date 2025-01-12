@@ -137,7 +137,7 @@ hash_function #(`BHT_INDEX_Wid) u_hash_function(.data_in(pc_pD),.hash_out(BHT_in
 
 wire [`BHT_INDEX_Wid-1:0] BHT_index_W;
 hash_function #(`BHT_INDEX_Wid) u_hash_function_W(.data_in(pc_W),.hash_out(BHT_index_W));
-wire [`BHR_Wid-1:0] PHT_index_W = BHT[BHT_index_W] ^ pc_W[`BHT_INDEX_Wid-1:0];
+wire [`BHR_Wid-1:0] PHT_index_W = BHT[BHT_index_W] ^ pc_W[`BHT_INDEX_Wid+1:2];
 wire [1:0]          PHT_wdata;
 bimodal_predictor u_bimodal_predictor(.data_i(PHT[PHT_index_W]),.taken(br_taken_W),.data_o(PHT_wdata));
 always @(posedge clk) begin
@@ -155,7 +155,7 @@ always @(posedge clk) begin
     end
 end
 
-assign PHT_index = BHT[BHT_index] ^ pc_pD[`BHT_INDEX_Wid-1:0];   // use xor to avoid aliasing
+assign PHT_index = BHT[BHT_index] ^ pc_pD[`BHT_INDEX_Wid+1:2];   // use xor to avoid aliasing
 
 // Target Cache
 reg  [31:0] TC_PC [`TC_NUM-1:0];
