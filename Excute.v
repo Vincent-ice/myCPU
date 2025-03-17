@@ -2,25 +2,26 @@
 module Excute (
     input                       clk,
     input                       rstn,
-
+    // 级间握手信号
     input                       M_allowin,
     output                      E_allowin,
-
+    // 级间数据信号
     input                       DE_valid,
     input   [`DE_BUS_Wid-1:0]   DE_BUS,
     
     output                      EM_valid,
     output  [`EM_BUS_Wid-1:0]   EM_BUS,
-
+    // 数据前推信号
     output  [`ED_for_BUS_Wid-1:0]   ED_for_BUS,
     output  [13:0]              csr_raddr_forward,
     input   [31:0]              csr_rdata_forward,
-
+    // 例外处理
     output                      ex_E,
     input                       ex_en,
+    // 分支预测错误信号
     output                      predict_error,
     output  [`Branch_BUS_Wid-1:0]  Branch_BUS,
-
+    // data sram相关
     output                      data_sram_req,
     output reg [ 3:0]           data_sram_wstrb,
     output  [31:0]              data_sram_addr,
@@ -96,7 +97,7 @@ always @(posedge clk) begin
     end
 end
 
-always @(posedge clk) begin
+always @(posedge clk) begin // 记录是否存在成功发送的data sram访问请求
     if (!rstn) begin
         send_handshake <= 1'b0;
     end
@@ -243,17 +244,17 @@ assign csr_raddr_forward = csr_we_E ? csr_addr_E : 14'b0;
 assign csr_wdata_final = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
 
 //EM BUS
-assign EM_BUS = {PB_BUS_E,          //261:195
-                 pc_E,              //194:163
-                 rf_wdata_E,        //162:131
-                 gr_we_E,           //130
-                 dest_E,            //129:125
-                 res_from_mem_E,    //124:121
-                 data_sram_addr,    //120:89
-                 ex_E,              //88
+assign EM_BUS = {PB_BUS_E,          //261:195       分支预测更新用总线
+                 pc_E,              //194:163       pc
+                 rf_wdata_E,        //162:131       regfile写数据
+                 gr_we_E,           //130           regfile写使能
+                 dest_E,            //129:125       regfile写目的寄存器号
+                 res_from_mem_E,    //124:121       ld入regfile控制
+                 data_sram_addr,    //120:89        data sram地址用于例外处理
+                 ex_E,              //88            例外相关信号
                  ecode_E,           //87:80
                  esubcode_E,        //79
-                 csr_addr_E,        //78:65
+                 csr_addr_E,        //78:65         csr相关信号
                  csr_we_E,          //64
                  csr_wmask_E,       //63:32
                  csr_wdata_final};      //31:0

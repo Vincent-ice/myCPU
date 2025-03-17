@@ -1,24 +1,27 @@
 `include "Defines.vh"
-module Fetch (
+module Fetch (      // 整个Fetch的逻辑十分混乱，补丁太多了，建议重写
     input                           clk,
     input                           rstn,
 
-    input    [`predict_BUS_Wid-1:0] predict_BUS,
-    input                           predict_error,
-    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
+    input    [`predict_BUS_Wid-1:0] predict_BUS,    // 分支预测总线 from pD
+    input                           predict_error,  // 预测错误信号 from E
+    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,     // 预测错误时的分支总线 from E
 
-    input                           ex_D,
-    input                           ex_E, 
-    input                           ex_en_i,
-    input    [31:0]                 ex_entryPC,
-    input                           ertn_flush_i,
-    input    [31:0]                 new_pc,
+    // 例外处理
+    input                           ex_D,           // D阶段例外申请
+    input                           ex_E,           // E阶段例外申请
+    input                           ex_en_i,        // 例外处理使能信号，即Wb阶段的例外申请
+    input    [31:0]                 ex_entryPC,     // 例外处理入口地址
+    input                           ertn_flush_i,   // ertn指令刷新信号
+    input    [31:0]                 new_pc,         // ertn指令刷新后的新PC
 
+    // 级间握手信号
     input                           pD_allowin,
     
     output                          FpD_valid,
     output   [`FpD_BUS_Wid-1:0]     FpD_BUS,
 
+    // inst sram相关
     output                          inst_sram_req,
     output                          inst_sram_wr,
     output   [1:0]                  inst_sram_size,
@@ -39,7 +42,7 @@ assign {br_taken_i,br_target_i} = Branch_BUS;
 wire        predict_taken  = predict_BUS[32];
 wire [31:0] predict_target = predict_BUS[31:0];
 
-//pipeline handshake
+//pipeline handshake  阻塞和重开逻辑大部分都是debug一点点磨出来的，看起来很复杂，我也看不懂
 reg  [31:0] pc_reg;
 reg  [31:0] pc_next;
 wire        pc_en;
@@ -91,7 +94,7 @@ always @(posedge clk) begin
     end
 end
 
-//branch buff
+//branch buff   这些buff应该是切开关键路径用的
 always @(posedge clk) begin
     if (!rstn) begin
         br_taken_buff <= 1'b0;
@@ -110,7 +113,7 @@ always @(posedge clk) begin
     end
 end
 
-//has_ex buff
+//has_ex buff       用于检测到流水线中存在例外，关闭访存请求以减少可能的长等待
 always @(posedge clk) begin
     if (!rstn) begin
         has_ex <= 1'b0;
@@ -149,11 +152,11 @@ always @(posedge clk) begin
     end
 end
 
-//PC
+//PC    **这里建议把整个next pc重写一下，写的太丑了**
 assign pc_en   = F_allowin && !ex_F && !send_handshake;
 always @(*) begin
     case (1'b1)
-        ex_en & has_ex: pc_next = ex_entryPC;
+        ex_en & has_ex: pc_next = ex_entryPC;       // 这个也是debug打的补丁
         br_taken_buff : pc_next = br_target_buff;
         has_ex        : pc_next = ex_entryPC;
         ertn_flush    : pc_next = new_pc;
@@ -209,10 +212,10 @@ always @(posedge clk) begin
 end
 
 //FD BUS
-assign FpD_BUS = {pc_reg,       //74:43
-                 inst_sram_rdata_buff,//42:11
-                 pc_en,         //10
-                 ex_F & !predict_error,//9
-                 ecode_F,       //8:1
-                 esubcode_F};   //0
+assign FpD_BUS = {pc_reg,       //74:43             pc
+                 inst_sram_rdata_buff,//42:11       inst
+                 pc_en,         //10                pc有效性
+                 ex_F & !predict_error,//9          F级例外
+                 ecode_F,       //8:1               ecode
+                 esubcode_F};   //0                 esubcode
 endmodule

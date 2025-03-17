@@ -3,25 +3,27 @@ module Decode (
     input                           clk,
     input                           rstn,
 
+    // 级间数据信号
     input                           pDD_valid,
     input [`pDD_BUS_Wid-1:0]        pDD_BUS,
 
+    // 外部中断信号，中断将被标记在D阶段的指令上
     input [ 7:0]                    hardware_interrupt,
-    
+    // 级间握手信号
     input                           E_allowin,
     output                          D_allowin,
-
+    // 数据前推总线
     input [`ED_for_BUS_Wid-1:0]     ED_for_BUS,
     input [`MD_for_BUS_Wid-1:0]     MD_for_BUS,
     input [`Wrf_BUS_Wid-1:0]        Wrf_BUS,
     input [`Wcsr_BUS_Wid-1:0]       Wcsr_BUS,
-
+    // 级间数据信号
     output                          DE_valid,
     output [`DE_BUS_Wid-1:0]        DE_BUS,
-
+    // 用于在E阶段计算csr的写入值（与alu并行）以处理csr的RAW冲突
     input  [13:0]                   csr_raddr_forward,
     output [31:0]                   csr_rdata_forward,
-
+    // 例外处理
     input                           predict_error,
     output                          ex_D,
     output                          ex_en,
@@ -297,7 +299,7 @@ assign load_stall = |res_from_mem_E && !ex_en &&
                     ((rf_raddr1 == dest_E) && (rf_raddr1_neq0) || (rf_raddr2 == dest_E) && (rf_raddr2_neq0)) &&
                     ((rf_raddr1 != dest_M) || (rf_raddr2 != dest_M));
 
-wire        rf_raddr1_eq_dest_E = (rf_raddr1 == dest_E) && (rf_raddr1_neq0) && !res_from_mem_E;
+wire        rf_raddr1_eq_dest_E = (rf_raddr1 == dest_E) && (rf_raddr1_neq0) && !res_from_mem_E; // 好像有问题 但是能跑
 wire        rf_raddr2_eq_dest_E = (rf_raddr2 == dest_E) && (rf_raddr2_neq0) && !res_from_mem_E;
 wire        rf_raddr1_eq_dest_M = (rf_raddr1 == dest_M) && (rf_raddr1_neq0);
 wire        rf_raddr2_eq_dest_M = (rf_raddr2 == dest_M) && (rf_raddr2_neq0);
@@ -324,7 +326,7 @@ always @(*) begin
     endcase
 end
 
-assign forward_stall = rf_raddr1_eq_dest_E | rf_raddr2_eq_dest_E;
+assign forward_stall = rf_raddr1_eq_dest_E | rf_raddr2_eq_dest_E; // 好像和load_stall重复了 但是也能跑
 
 //CSR data manage
 wire [13:0] csr_addr     = inst_ertn ? 14'h06 :
@@ -398,7 +400,7 @@ end
 
 assign new_pc = era_pc;
 
-//branch manage
+//branch manage  仅提供基址和偏移量，计算在E阶段
 wire [31:0] br_base;
 wire [31:0] br_offs;
 wire        b_inst = inst_beq | inst_bne | inst_blt | inst_bge |
@@ -457,7 +459,7 @@ wire [7:0] ecode_D = ~D_valid     ? 8'b0       :
                      unknownInst  ? `ECODE_INE : 8'b0;
 wire       esubcode_D = esubcode_pD;
 
-always @(posedge clk) begin
+always @(posedge clk) begin // 存在例外时暂停本级
     if (!rstn) begin
 ex_flag <= 1'b0;
     end 
@@ -470,26 +472,26 @@ ex_flag <= 1'b0;
     end
 
 //output manage
-assign DE_BUS = {inst_D,        //420:389
-                 inst_b,inst_bl,inst_jirl,   //388:386
+assign DE_BUS = {inst_D,        //420:389                   inst
+                 inst_b,inst_bl,inst_jirl,   //388:386      用于分支预测及错误判断
                  br_base,     //385:354
                  predict_taken,//353
                  predict_target,//352:321
                  inst_beq,inst_bne,inst_blt,inst_bge,inst_bltu,inst_bgeu, //320:315
                  br_offs,         //314:283
-                 pc_D,          //282:251
-                 alu_op,        //250:232
+                 pc_D,          //282:251                   pc
+                 alu_op,        //250:232                   alu相关信号
                  alu_src1,      //231:200
                  alu_src2,      //199:168
-                 rkd_value,     //167:136
-                 gr_we,         //135
+                 rkd_value,     //167:136                   用于访存
+                 gr_we,         //135                       数据流控制信号
                  mem_we,        //134:131
                  dest,          //130:126
                  res_from_mem,  //125:122
-                 ex_D,          //121
+                 ex_D,          //121                       例外信号
                  ecode_D,       //120:113
                  esubcode_D,    //112
-                 csr_addr,      //111:98
+                 csr_addr,      //111:98                    csr相关信号
                  csr_we,        //97
                  csr_value,     //96:65
                  csr_wmask,     //64:33
