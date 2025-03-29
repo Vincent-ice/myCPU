@@ -44,8 +44,8 @@
 `define CSR_EENTRY_VA       csr_EENTRY[31:6] //RW
 
 `define CSR_TLBIDX          14'h10
-`define CSR_TLBIDX_INDEX    csr_TLBIDX[15:0] //RW
-//                          csr_TLBIDX[23:16]= 0
+`define CSR_TLBIDX_INDEX    csr_TLBIDX[$clog2(`TLBNUM)-1:0] //RW
+//                          csr_TLBIDX[23:$clog2(TLBNUM)]= 0
 `define CSR_TLBIDX_PS       csr_TLBIDX[29:24]//RW
 //                          csr_TLBIDX[30]   = 0
 `define CSR_TLBIDX_NE       csr_TLBIDX[31]   //RW
@@ -76,7 +76,7 @@
 `define CSR_ASID            14'h18
 `define CSR_ASID_ASID       csr_ASID[9:0]    //RW
 //                          csr_ASID[15:10]  = 0
-`define CSR_ASID_ASIDBITS   csr_ASID[23:16]  //RW
+`define CSR_ASID_ASIDBITS   csr_ASID[23:16]  //R
 //                          csr_ASID[31:24]  = 0
 
 `define CSR_PGDL            14'h19

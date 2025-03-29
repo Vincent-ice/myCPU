@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 module multCore (
     input wire clk,
     input wire rstn,
@@ -28,31 +29,31 @@ generate
 endgenerate
 
 wire [65:0] wallace1_buf [9:0];
-begin:wallace1
+// begin:wallace1
     compressor32 #(66) wallace1_1(mult_buf[0],mult_buf[1]<<2,mult_buf[2]<<4,wallace1_buf[0],wallace1_buf[1]);
     compressor32 #(66) wallace1_2(mult_buf[3]<<6,mult_buf[4]<<8,mult_buf[5]<<10,wallace1_buf[2],wallace1_buf[3]);
     compressor32 #(66) wallace1_3(mult_buf[6]<<12,mult_buf[7]<<14,mult_buf[8]<<16,wallace1_buf[4],wallace1_buf[5]);
     compressor32 #(66) wallace1_4(mult_buf[9]<<18,mult_buf[10]<<20,mult_buf[11]<<22,wallace1_buf[6],wallace1_buf[7]);
     compressor32 #(66) wallace1_5(mult_buf[12]<<24,mult_buf[13]<<26,mult_buf[14]<<28,wallace1_buf[8],wallace1_buf[9]);
-end
+// end
 wire [65:0] wallace2_buf [7:0];
-begin:wallace2
+// begin:wallace2
     compressor32 #(66) wallace2_1(wallace1_buf[0],wallace1_buf[1],wallace1_buf[2],wallace2_buf[0],wallace2_buf[1]);
     compressor32 #(66) wallace2_2(wallace1_buf[3],wallace1_buf[4],wallace1_buf[5],wallace2_buf[2],wallace2_buf[3]);
     compressor32 #(66) wallace2_3(wallace1_buf[6],wallace1_buf[7],wallace1_buf[8],wallace2_buf[4],wallace2_buf[5]);
     compressor32 #(66) wallace2_4(wallace1_buf[9],mult_buf[15]<<30,mult_buf[16]<<32,wallace2_buf[6],wallace2_buf[7]);
-end
+// end
 wire [65:0] wallace3_buf [3:0];
-begin:wallace3
+// begin:wallace3
     compressor32 #(66) wallace3_1(wallace2_buf[0],wallace2_buf[1],wallace2_buf[2],wallace3_buf[0],wallace3_buf[1]);
     compressor32 #(66) wallace3_2(wallace2_buf[3],wallace2_buf[4],wallace2_buf[5],wallace3_buf[2],wallace3_buf[3]);
-end
+// end
 
 wire [65:0] wallace4_buf [3:0];
-begin:wallace4
+// begin:wallace4
     compressor32 #(66) wallace4_1(wallace3_buf[0],wallace3_buf[1],wallace3_buf[2],wallace4_buf[0],wallace4_buf[1]);
     compressor32 #(66) wallace4_2(wallace3_buf[3],wallace2_buf[6],wallace2_buf[7],wallace4_buf[2],wallace4_buf[3]);
-end
+// end
 
 
 /*--------------------------------------*/
@@ -64,17 +65,17 @@ always @(posedge clk) begin
     wallace_buf[3] <= wallace4_buf[3];
 end
 wire [65:0] wallace5_buf [1:0];
-begin:wallace5
+// begin:wallace5
     compressor32 #(66) wallace5(wallace_buf[0],wallace_buf[1],wallace_buf[2],wallace5_buf[0],wallace5_buf[1]);
-end
+// end
 wire [65:0] wallace6_buf [1:0];
-begin:wallace6
+// begin:wallace6
     compressor32 #(66) wallace6(wallace5_buf[0],wallace5_buf[1],wallace_buf[3],wallace6_buf[0],wallace6_buf[1]);
-end
+// end
 wire [65:0] out_buf;
-begin:adder
+// begin:adder
     assign out_buf = wallace6_buf[0] + wallace6_buf[1];
-end
+// end
 
 assign out = out_buf[63:0];
 

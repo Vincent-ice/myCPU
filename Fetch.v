@@ -1,27 +1,27 @@
+`timescale 1ns / 1ps
 `include "Defines.vh"
-module Fetch (      // 整个Fetch的逻辑十分混乱，补丁太多了，建议重写
+module Fetch (
     input                           clk,
     input                           rstn,
 
-    input    [`predict_BUS_Wid-1:0] predict_BUS,    // 分支预测总线 from pD
-    input                           predict_error,  // 预测错误信号 from E
-    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,     // 预测错误时的分支总线 from E
+    input    [`predict_BUS_Wid-1:0] predict_BUS,
+    input                           predict_error,
+    input    [`Branch_BUS_Wid-1:0]  Branch_BUS,
 
-    // 例外处理
-    input                           ex_D,           // D阶段例外申请
-    input                           ex_E,           // E阶段例外申请
-    input                           ex_en_i,        // 例外处理使能信号，即Wb阶段的例外申请
-    input    [31:0]                 ex_entryPC,     // 例外处理入口地址
-    input                           ertn_flush_i,   // ertn指令刷新信号
-    input    [31:0]                 new_pc,         // ertn指令刷新后的新PC
+    input                           ex_D,
+    input                           ex_E, 
+    input                           ex_en_i,
+    input    [31:0]                 ex_entryPC,
+    input                           ertn_flush_i,
+    input    [31:0]                 new_pc,
+    input                           TLBR_en_i,
+    input    [31:0]                 TLBR_entryPC,
 
-    // 级间握手信号
     input                           pD_allowin,
-    
+
     output                          FpD_valid,
     output   [`FpD_BUS_Wid-1:0]     FpD_BUS,
 
-    // inst sram相关
     output                          inst_sram_req,
     output                          inst_sram_wr,
     output   [1:0]                  inst_sram_size,
@@ -30,8 +30,20 @@ module Fetch (      // 整个Fetch的逻辑十分混乱，补丁太多了，建�
     input                           inst_sram_addr_ok,
     input                           inst_sram_data_ok,
     output   [31:0]                 inst_sram_wdata,
-    input    [31:0]                 inst_sram_rdata
+    input    [31:0]                 inst_sram_rdata,
 
+    input  [`CSR2FE_BUS_Wid-1:0] CSR2FE_BUS,
+    output [               18:0] s0_vppn,
+    output                       s0_va_bit12,
+    output [                9:0] s0_asid,
+    input                        s0_found,
+    input  [$clog2(`TLBNUM)-1:0] s0_index,
+    input  [               19:0] s0_ppn,
+    input  [                5:0] s0_ps,
+    input  [                1:0] s0_plv,
+    input  [                1:0] s0_mat,
+    input                        s0_d,
+    input                        s0_v
 );
 
 //Branch bus
@@ -42,7 +54,7 @@ assign {br_taken_i,br_target_i} = Branch_BUS;
 wire        predict_taken  = predict_BUS[32];
 wire [31:0] predict_target = predict_BUS[31:0];
 
-//pipeline handshake  阻塞和重开逻辑大部分都是debug一点点磨出来的，看起来很复杂，我也看不懂
+//pipeline handshake
 reg  [31:0] pc_reg;
 reg  [31:0] pc_next;
 wire        pc_en;
@@ -51,10 +63,12 @@ reg  ex_F;
 reg  has_ex;
 reg  ex_en;
 reg  ertn_flush;
+reg  TLBR_en;
 reg  [31:0] br_target;
 reg  br_taken_buff;
 reg  [31:0] br_target_buff;
 reg  send_handshake;
+reg  predict_error_buff;
 reg  F_valid;
 wire F_valid_next   = rstn & inst_sram_req & inst_sram_addr_ok;//next cycle valid
 (*max_fanout = 20*)wire F_ready_go;//ready send to next stage
@@ -94,7 +108,7 @@ always @(posedge clk) begin
     end
 end
 
-//branch buff   这些buff应该是切开关键路径用的
+//branch buff
 always @(posedge clk) begin
     if (!rstn) begin
         br_taken_buff <= 1'b0;
@@ -112,8 +126,19 @@ always @(posedge clk) begin
         br_taken_buff <= 1'b0;
     end
 end
+always @(posedge clk) begin
+    if (!rstn) begin
+        predict_error_buff <= 1'b0;
+    end
+    else if (predict_error_buff) begin
+        predict_error_buff <= 1'b0;
+    end
+    else if (predict_error) begin
+        predict_error_buff <= 1'b1;
+    end
+end
 
-//has_ex buff       用于检测到流水线中存在例外，关闭访存请求以减少可能的长等待
+//has_ex buff
 always @(posedge clk) begin
     if (!rstn) begin
         has_ex <= 1'b0;
@@ -126,16 +151,18 @@ always @(posedge clk) begin
     end
 end
 
-//ex_en buff
+//ex_en & TLBR buff
 always @(posedge clk) begin
     if (!rstn) begin
         ex_en <= 1'b0;
     end
     else if (ex_en_i) begin
         ex_en <= 1'b1;
+        TLBR_en <= TLBR_en_i;
     end
     else if (F_valid_next & F_allowin) begin
         ex_en <= 1'b0;
+        TLBR_en <= 1'b0;
     end
 end
 
@@ -152,18 +179,19 @@ always @(posedge clk) begin
     end
 end
 
-//PC    **这里建议把整个next pc重写一下，写的太丑了**
-assign pc_en   = F_allowin && !ex_F && !send_handshake;
-always @(*) begin
+//PC
+assign pc_en   = F_allowin && !ex_F && !send_handshake && !predict_error_buff;
+always @(posedge clk) begin
     case (1'b1)
-        ex_en & has_ex: pc_next = ex_entryPC;       // 这个也是debug打的补丁
-        br_taken_buff : pc_next = br_target_buff;
-        has_ex        : pc_next = ex_entryPC;
-        ertn_flush    : pc_next = new_pc;
-        default       : pc_next = pc_plus4;
+        TLBR_en_i | TLBR_en: pc_next <= TLBR_entryPC;
+        ex_en_i | ex_en : pc_next <= ex_entryPC;
+        br_taken_buff   : pc_next <= br_target_buff;
+        has_ex          : pc_next <= ex_entryPC;
+        ertn_flush      : pc_next <= new_pc;
+        default         : pc_next <= pc_plus4;
     endcase
 end
-/* assign pc_next = br_taken_E   ? br_target_E                        :
+/* assign pc_next = br_taken   ? br_target                        :
                  br_taken_D   ? br_target_D                        : 
                  ex_en        ? ex_entryPC                         :
                  predict_taken? predict_target                     :
@@ -172,20 +200,79 @@ end
 always @(posedge clk) begin
     if(!rstn)begin
         pc_reg <= 32'h1bff_fffc;
+        //seq_pc <= 32'h1c00_0000;
     end else if (F_valid_next && F_allowin) begin
         pc_reg <= pc_next;
     end
 end
 
+//address translation
+wire [ 9:0] csr_ASID_ASID;
+wire        csr_CRMD_DA;
+wire        csr_CRMD_PG;
+wire [ 1:0] csr_CRMD_PLV;
+wire        csr_DMW0_PLV0;
+wire        csr_DMW0_PLV3;
+wire [ 2:0] csr_DMW0_VSEG;
+wire [ 2:0] csr_DMW0_PSEG;
+wire        csr_DMW1_PLV0;
+wire        csr_DMW1_PLV3;
+wire [ 2:0] csr_DMW1_VSEG;
+wire [ 2:0] csr_DMW1_PSEG;
+assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
+        csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,csr_DMW0_PSEG,
+        csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG,csr_DMW1_PSEG} = CSR2FE_BUS;
+
+wire        da_hit;
+wire        dmw0_hit;
+wire        dmw1_hit;
+wire        dmw_hit = dmw0_hit || dmw1_hit;
+//TLB
+wire [31:0] vaddr = pc_next;
+wire [31:0] paddr;
+
+wire [19:0] vpn = vaddr[31:12];
+wire [21:0] offset = vaddr[21:0];
+
+assign s0_vppn = vpn[19:1];
+assign s0_va_bit12 = vpn[0];
+assign s0_asid = csr_ASID_ASID;
+
+wire [31:0] tlb_addr = (s0_ps == 6'd12) ? {s0_ppn[19:0], offset[11:0]} :
+                                          {s0_ppn[19:10], offset[21:0]};
+
+
+assign da_hit = (csr_CRMD_DA == 1) && (csr_CRMD_PG == 0);
+
+// DMW
+assign dmw0_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW0_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW0_PLV3 ) && (vaddr[31:29] == csr_DMW0_VSEG); 
+assign dmw1_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW1_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW1_PLV3 ) && (vaddr[31:29] == csr_DMW1_VSEG); 
+
+wire [31:0] dmw_addr = {32{dmw0_hit}} & {csr_DMW0_PSEG, vaddr[28:0]} |
+                       {32{dmw1_hit}} & {csr_DMW1_PSEG, vaddr[28:0]};
+
+// PADDR
+assign paddr = da_hit  ? vaddr    :
+               dmw_hit ? dmw_addr :
+                         tlb_addr ;
+
 //exception manage
 wire        ex_ADEF    = |pc_next[1:0];
+wire        ex_TLBR    = ~da_hit & ~dmw_hit & ~s0_found;
+wire        ex_PIF     = ~da_hit & ~dmw_hit & s0_found & ~s0_v;
+wire        ex_PPI     = ~da_hit & ~dmw_hit & (csr_CRMD_PLV > s0_plv);
 reg  [ 7:0] ecode_F;
 reg         esubcode_F;
 always @(posedge clk) begin
     if (!predict_error && F_valid_next && F_allowin) begin
-        ex_F    <= (ex_ADEF);
-        ecode_F <= ex_ADEF ? `ECODE_ADEF : 8'h00;
-        esubcode_F <= ex_ADEF ? `ESUBCODE_ADEF : 1'b0;
+        ex_F    <= (ex_ADEF || ex_TLBR || ex_PIF || ex_PPI);
+        ecode_F <= ex_ADEF ? `ECODE_ADEF :
+               ex_TLBR ? `ECODE_TLBR :
+               ex_PIF  ? `ECODE_PIF  :
+               ex_PPI  ? `ECODE_PPI  : 8'h00;
+        esubcode_F <= `ESUBCODE_ADEF;
     end
     else begin
         ex_F <= 1'b0;
@@ -200,7 +287,7 @@ assign inst_sram_req   = pc_en;
 assign inst_sram_wr    = 1'b0;
 assign inst_sram_size  = 2'b10;
 assign inst_sram_wstrb = 4'b0;
-assign inst_sram_addr  = pc_next; //virtual
+assign inst_sram_addr  = paddr; 
 assign inst_sram_wdata = 32'b0 ;
 always @(posedge clk) begin
     if (!rstn) begin
@@ -212,10 +299,12 @@ always @(posedge clk) begin
 end
 
 //FD BUS
-assign FpD_BUS = {pc_reg,       //74:43             pc
-                 inst_sram_rdata_buff,//42:11       inst
-                 pc_en,         //10                pc有效性
-                 ex_F & !predict_error,//9          F级例外
-                 ecode_F,       //8:1               ecode
-                 esubcode_F};   //0                 esubcode
+assign FpD_BUS = {pc_reg,       //74:43
+                 inst_sram_rdata_buff,//42:11
+                 pc_en,         //10
+                 ex_F & !predict_error,//9
+                 ecode_F,       //8:1
+                 esubcode_F};   //0
+
+
 endmodule

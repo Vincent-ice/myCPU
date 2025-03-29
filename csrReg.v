@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 `include "Defines.vh"
 `include "csrReg.vh"
 module csrReg (
@@ -21,17 +22,55 @@ module csrReg (
     input  [31:0]               pc,
     input  [31:0]               vaddr,
 
+    input                       ertn_flush,
     input  [ 7:0]               hardware_interrupt,
     output                      has_int,
     output [ 7:0]               int_ecode,
 
-    output [31:0]               new_pc,
-    input                       ertn_flush,
+    output reg [31:0]           new_pc,
     output [31:0]               ex_entryPC,
+    output [31:0]               TLBR_entryPC,
 
     output [63:0]               counter,
     output [31:0]               counterID,
-    output [63:0]               counter_shift
+    output [63:0]               counter_shift,
+
+`ifdef DIFFTEST_EN
+    output                      tlbfill_en,
+    output [$clog2(`TLBNUM)-1:0] tlbfill_rand_index,
+    output [31:0]                csr_estat_diff,
+
+    output wire     [31:0]  csr_crmd_diff_0     ,
+    output wire     [31:0]  csr_prmd_diff_0     ,
+    // output wire     [31:0]  csr_ectl_diff_0     ,
+    output wire     [31:0]  csr_estat_diff_0    ,
+    output wire     [31:0]  csr_era_diff_0      ,
+    output wire     [31:0]  csr_badv_diff_0     ,
+    output wire	    [31:0]  csr_eentry_diff_0   ,
+    output wire 	[31:0]  csr_tlbidx_diff_0   ,
+    output wire 	[31:0]  csr_tlbehi_diff_0   ,
+    output wire 	[31:0]  csr_tlbelo0_diff_0  ,
+    output wire 	[31:0]  csr_tlbelo1_diff_0  ,
+    output wire 	[31:0]  csr_asid_diff_0     ,
+    output wire 	[31:0]  csr_save0_diff_0    ,
+    output wire 	[31:0]  csr_save1_diff_0    ,
+    output wire 	[31:0]  csr_save2_diff_0    ,
+    output wire 	[31:0]  csr_save3_diff_0    ,
+    output wire 	[31:0]  csr_tid_diff_0      ,
+    output wire 	[31:0]  csr_tcfg_diff_0     ,
+    output wire 	[31:0]  csr_tval_diff_0     ,
+    output wire 	[31:0]  csr_ticlr_diff_0    ,
+    output wire 	[31:0]  csr_llbctl_diff_0   ,
+    output wire 	[31:0]  csr_tlbrentry_diff_0,
+    output wire 	[31:0]  csr_dmw0_diff_0     ,
+    output wire 	[31:0]  csr_dmw1_diff_0     ,
+    output wire 	[31:0]  csr_pgdl_diff_0     ,
+    output wire 	[31:0]  csr_pgdh_diff_0     ,
+`endif
+
+    input  [`TLB2CSR_BUS_Wid-1:0] TLB2CSR_BUS,
+    output [`CSR2TLB_BUS_Wid-1:0] CSR2TLB_BUS,
+    output [`CSR2FE_BUS_Wid-1:0]  CSR2FE_BUS
 );
 
 //csr register
@@ -103,9 +142,51 @@ reg  timer_en;
 
 reg  LLbit;
 
+//TLB
+wire        inst_tlbfill;
+wire        inst_tlbsrch;
+wire        inst_tlbrd;
+wire        inst_tlbwr;
+wire        s1_found;
+wire [$clog2(`TLBNUM)-1:0] s1_index;
+wire        wen;
+wire [$clog2(`TLBNUM)-1:0] w_index;
+wire        w_e;
+wire [18:0] w_vppn;
+wire [ 5:0] w_ps;
+wire [ 9:0] w_asid;
+wire        w_g;
+wire [19:0] w_ppn0;
+wire [ 1:0] w_plv0;
+wire [ 1:0] w_mat0;
+wire        w_d0;
+wire        w_v0;
+wire [19:0] w_ppn1;
+wire [ 1:0] w_plv1;
+wire [ 1:0] w_mat1;
+wire        w_d1;
+wire        w_v1;
+wire [$clog2(`TLBNUM)-1:0] r_index;
+wire        r_e;
+wire [18:0] r_vppn;
+wire [ 5:0] r_ps;
+wire [ 9:0] r_asid;
+wire        r_g;
+wire [19:0] r_ppn0;
+wire [ 1:0] r_plv0;
+wire [ 1:0] r_mat0;
+wire        r_d0;
+wire        r_v0;
+wire [19:0] r_ppn1;
+wire [ 1:0] r_plv1;
+wire [ 1:0] r_mat1;
+wire        r_d1;
+wire        r_v1;
+
 //inturrupt
-wire [12:0] int = csr_ECFG[12:0] & csr_ESTAT[12:0] & {13{`CSR_CRMD_IE}};
-assign has_int = |int;
+wire [12:0] intrpt;
+assign intrpt = csr_ECFG[12:0] & csr_ESTAT[12:0] & {13{`CSR_CRMD_IE}};
+assign has_int = |intrpt;
 assign int_ecode = /* int[12] ? 8'd76 :
                    int[11] ? 8'd75 :
                    int[10] ? 8'd74 :
@@ -202,11 +283,19 @@ always @(posedge clk ) begin
     else if (ex_en) begin
         `CSR_CRMD_PLV <=  2'b0;
         `CSR_CRMD_IE  <=  1'b0;
+        if (ecode == `ECODE_TLBR) begin
+            `CSR_CRMD_DA  <=  1'b1;
+            `CSR_CRMD_PG  <=  1'b0;
+        end
     end
     else if (ertn_flush) begin
         `CSR_CRMD_PLV <= `CSR_PRMD_PPLV;
         `CSR_CRMD_IE  <= `CSR_PRMD_PIE ;
-    end 
+        if (`CSR_ESTAT_ECODE == `ECODE_TLBR) begin
+            `CSR_CRMD_DA  <= 1'b0;
+            `CSR_CRMD_PG  <= 1'b1;
+        end
+    end
     else if (CRMD_we) begin
         csr_CRMD[8:0] <= csr_wdata[8:0];
     end
@@ -305,17 +394,23 @@ always @(posedge clk) begin
     end
 end
 
-assign new_pc = in_ex &&
-                (`CSR_ESTAT_ECODE == `ECODE_SYS ||
-                 `CSR_ESTAT_ECODE == `ECODE_BRK ||
-                 `CSR_ESTAT_ECODE == `ECODE_INE ||
-                 `CSR_ESTAT_ECODE == `ECODE_INT)  ? csr_ERA + 32'd4 : csr_ERA;
+always @(posedge clk) begin
+    if (in_ex) begin
+        case (`CSR_ESTAT_ECODE)
+            `ECODE_SYS : new_pc <= csr_ERA + 32'd4;
+            `ECODE_BRK : new_pc <= csr_ERA + 32'd4;
+            `ECODE_INE : new_pc <= csr_ERA + 32'd4;
+            `ECODE_INT : new_pc <= csr_ERA + 32'd4;
+            default    : new_pc <= csr_ERA;
+        endcase
+    end
+end
 
 //BADV
 wire va_error = (ecode == `ECODE_ALE ) ||
                 (ecode == `ECODE_PIL ) || (ecode == `ECODE_PIS) ||
                 (ecode == `ECODE_PIF ) || (ecode == `ECODE_PME) ||
-                (ecode == `ECODE_PPI ) ;
+                (ecode == `ECODE_PPI ) || (ecode == `ECODE_TLBR) ;
 always @(posedge clk ) begin
     if (!rstn) begin
         csr_BADV <= 32'b0;
@@ -463,7 +558,7 @@ always @(posedge clk ) begin
         if (csr_wdata[1] == 1'b1) begin
             LLbit <= 1'b0;
         end
-end else begin
+    end else begin
         csr_LLBCTL[0] <= LLbit;
     end
 end
@@ -493,5 +588,268 @@ always @(posedge clk) begin
         csr_CNTC <= csr_wdata;
     end
 end
+
+
+// CSR <= TLB
+assign  {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,s1_found,s1_index,r_e,r_vppn,r_ps,r_asid,r_g,
+         r_ppn0,r_plv0,r_mat0,r_d0,r_v0,r_ppn1,r_plv1,r_mat1,r_d1,r_v1} = TLB2CSR_BUS ;
+
+// TLBIDX
+always @(posedge clk) begin
+    if(!rstn) begin
+        csr_TLBIDX <= 32'b0;
+    end
+    else if(inst_tlbsrch) begin
+        if(s1_found) begin
+            `CSR_TLBIDX_NE    <= 1'b0;
+            `CSR_TLBIDX_INDEX <= s1_index;
+        end
+        else 
+            `CSR_TLBIDX_NE    <= 1'b1;
+    end
+    else if(inst_tlbrd) begin
+        if (r_e) begin
+            `CSR_TLBIDX_NE    <= 1'b0;
+            `CSR_TLBIDX_PS    <= r_ps;
+        end 
+        else begin
+            `CSR_TLBIDX_NE    <= 1'b1;
+            `CSR_TLBIDX_PS    <= 6'b0;
+        end
+    end
+    else if(TLBIDX_we)begin
+        csr_TLBIDX <= (csr_wdata) & 32'hbf00_ffff;
+    end
+end
+
+
+// TLBEHI
+always @(posedge clk) begin
+    if(!rstn) begin
+        csr_TLBEHI <= 32'b0;
+    end
+    else if(inst_tlbrd) begin
+        if (r_e) begin
+            `CSR_TLBEHI_VPPN <= r_vppn;
+        end
+        else begin
+            csr_TLBEHI <= 32'b0;
+        end
+    end
+    else if (~ertn_flush & (ecode == `ECODE_TLBR || 
+                            ecode == `ECODE_PIL  || 
+                            ecode == `ECODE_PIS  || 
+                            ecode == `ECODE_PIF  || 
+                            ecode == `ECODE_PME  || 
+                            ecode == `ECODE_PPI)) begin
+        `CSR_TLBEHI_VPPN <= vaddr[31:13];
+    end
+    else if(TLBEHI_we) begin
+        csr_TLBEHI[31:13] <= csr_wdata[31:13]; 
+    end 
+end
+
+
+
+// TLBELO0  even page
+always @(posedge clk) begin
+    if(!rstn) begin
+        csr_TLBELO0 <= 32'b0;
+    end
+    else if(inst_tlbrd) begin
+        if(r_e) begin
+            `CSR_TLBELO0_V   <= r_v0;
+            `CSR_TLBELO0_D   <= r_d0;
+            `CSR_TLBELO0_PLV <= r_plv0;
+            `CSR_TLBELO0_MAT <= r_mat0;
+            `CSR_TLBELO0_G   <= r_g;
+            `CSR_TLBELO0_PPN <= r_ppn0;
+        end
+        else begin
+            csr_TLBELO0 <= 32'b0;
+        end
+    end
+    else if(TLBELO0_we) begin
+        csr_TLBELO0 <= (csr_wdata) & 32'hffff_ff7f;   
+    end
+end
+
+
+// TLBELO1   odd page
+always @(posedge clk) begin
+    if(!rstn) begin
+        csr_TLBELO1 <= 32'b0;
+    end
+    else if(inst_tlbrd) begin
+        if(r_e) begin
+            `CSR_TLBELO1_V   <= r_v1;
+            `CSR_TLBELO1_D   <= r_d1;
+            `CSR_TLBELO1_PLV <= r_plv1;
+            `CSR_TLBELO1_MAT <= r_mat1;
+            `CSR_TLBELO1_G   <= r_g;
+            `CSR_TLBELO1_PPN <= r_ppn1;
+        end
+        else begin
+            csr_TLBELO1 <= 32'b0;
+        end
+    end
+    else if(TLBELO1_we) begin
+        csr_TLBELO1 <= (csr_wdata) & 32'hffff_ff7f;
+    end
+end
+
+
+// ASID                                 
+always @(posedge clk) begin
+    if(!rstn) begin
+        csr_ASID <= 32'h000a_0000;
+    end
+    else if(inst_tlbrd) begin
+        if (r_e) begin
+            `CSR_ASID_ASID <= r_asid;
+        end
+        else begin
+            `CSR_ASID_ASID <= 'b0;
+        end
+    end
+    else if(ASID_we)begin
+        `CSR_ASID_ASID  <= csr_wdata[9:0];
+    end
+end
+
+//PGDL
+always @(posedge clk) begin
+    if (!rstn) begin
+        csr_PGDL <= 32'b0;
+    end 
+    else if (PGDL_we) begin
+        `CSR_PGDL_BASE <= csr_wdata[31:12];
+    end
+end
+
+//PGDH
+always @(posedge clk) begin
+    if (!rstn) begin
+        csr_PGDH <= 32'b0;
+    end 
+    else if (PGDH_we) begin
+        `CSR_PGDH_BASE <= csr_wdata[31:12];
+    end
+end
+
+//PGD
+always @(posedge clk) begin
+    if (!rstn) begin
+        csr_PGD <= 32'b0;
+    end
+end
+
+assign csr_PGD_rvalue = {csr_BADV[31] ? `CSR_PGDL_BASE : `CSR_PGDH_BASE , 12'b0};
+
+// TLBRENTRY
+always @(posedge clk ) begin
+    if(!rstn)begin
+        csr_TLBRENTRY <= 32'b0;
+    end 
+    else if(TLBRENTRY_we) begin
+        `CSR_TLBRENTRY_PA <= csr_wdata[31:6]; 
+    end
+end
+assign TLBR_entryPC = csr_TLBRENTRY;
+// DMW0
+always @ (posedge clk) begin
+    if (!rstn) begin
+        csr_DMW0 <= 32'b0;
+    end
+    else if (DMW0_we) begin
+        `CSR_DMW0_VSEG <= csr_wmask[31:29];
+        `CSR_DMW0_PSEG <= csr_wmask[27:25];
+        `CSR_DMW0_MAT  <= csr_wmask[5:4];
+        `CSR_DMW0_PLV3 <= csr_wmask[3];
+        `CSR_DMW0_PLV0 <= csr_wmask[0];
+    end
+end
+
+// DMW1
+always @ (posedge clk) begin
+    if (!rstn) begin
+        csr_DMW1 <= 32'b0;
+    end
+    else if (DMW1_we) begin
+        `CSR_DMW1_VSEG <= csr_wmask[31:29];
+        `CSR_DMW1_PSEG <= csr_wmask[27:25];
+        `CSR_DMW1_MAT  <= csr_wmask[5:4];
+        `CSR_DMW1_PLV3 <= csr_wmask[3];
+        `CSR_DMW1_PLV0 <= csr_wmask[0];
+    end
+end
+
+//TLB index
+reg [$clog2(`TLBNUM)-1:0] tlbfill_index;
+always @(posedge clk)begin
+    if(!rstn)begin
+        tlbfill_index <= 'b0;
+    end
+    else if(inst_tlbfill) begin
+        tlbfill_index <= tlbfill_index + 1;
+    end
+end
+
+// CSR => TLB
+assign wen     = inst_tlbwr || inst_tlbfill;
+assign w_index = inst_tlbfill ? tlbfill_index : `CSR_TLBIDX_INDEX;
+assign w_e     = `CSR_ESTAT_ECODE == 6'h3f ? 1'b1 : ~`CSR_TLBIDX_NE;
+assign w_vppn  = `CSR_TLBEHI_VPPN;
+assign w_ps    = `CSR_TLBIDX_PS;
+assign w_asid  = `CSR_ASID_ASID;
+assign w_g     = `CSR_TLBELO0_G && `CSR_TLBELO1_G;
+assign w_ppn0  = `CSR_TLBELO0_PPN;
+assign w_plv0  = `CSR_TLBELO0_PLV;
+assign w_mat0  = `CSR_TLBELO0_MAT;
+assign w_d0    = `CSR_TLBELO0_D;
+assign w_v0    = `CSR_TLBELO0_V;
+assign w_ppn1  = `CSR_TLBELO1_PPN;
+assign w_plv1  = `CSR_TLBELO1_PLV;
+assign w_mat1  = `CSR_TLBELO1_MAT;
+assign w_d1    = `CSR_TLBELO1_D;
+assign w_v1    = `CSR_TLBELO1_V;
+assign r_index = `CSR_TLBIDX_INDEX;
+
+assign CSR2TLB_BUS = {wen,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
+                      w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1,r_index};
+
+//for address translation
+assign CSR2FE_BUS = {`CSR_ASID_ASID,`CSR_CRMD_DA,`CSR_CRMD_PG,`CSR_CRMD_PLV,
+                     `CSR_DMW0_PLV0,`CSR_DMW0_PLV3,`CSR_DMW0_VSEG,`CSR_DMW0_PSEG,
+                     `CSR_DMW1_PLV0,`CSR_DMW1_PLV3,`CSR_DMW1_VSEG,`CSR_DMW1_PSEG};
+
+`ifdef DIFFTEST_EN
+assign  csr_crmd_diff_0     = csr_CRMD;    
+assign  csr_prmd_diff_0     = csr_PRMD;
+// assign  csr_ectl_diff_0     = csr_ECTL;
+assign  csr_estat_diff_0    = csr_ESTAT;
+assign  csr_era_diff_0      = csr_ERA;
+assign  csr_badv_diff_0     = csr_BADV;
+assign  csr_eentry_diff_0   = csr_EENTRY;
+assign  csr_tlbidx_diff_0   = csr_TLBIDX;
+assign  csr_tlbehi_diff_0   = csr_TLBEHI;
+assign  csr_tlbelo0_diff_0  = csr_TLBELO0;
+assign  csr_tlbelo1_diff_0  = csr_TLBELO1;
+assign  csr_asid_diff_0     = csr_ASID;
+assign  csr_save0_diff_0    = csr_SAVE0;
+assign  csr_save1_diff_0    = csr_SAVE1;
+assign  csr_save2_diff_0    = csr_SAVE2;
+assign  csr_save3_diff_0    = csr_SAVE3;
+assign  csr_tid_diff_0      = csr_TID;
+assign  csr_tcfg_diff_0     = csr_TCFG;
+assign  csr_tval_diff_0     = csr_TVAL;
+assign  csr_ticlr_diff_0    = csr_TICLR;
+assign  csr_llbctl_diff_0   = csr_LLBCTL;
+assign  csr_tlbrentry_diff_0= csr_TLBRENTRY;
+assign  csr_dmw0_diff_0     = csr_DMW0;
+assign  csr_dmw1_diff_0     = csr_DMW1;
+assign  csr_pgdl_diff_0     = csr_PGDL;
+assign  csr_pgdh_diff_0     = csr_PGDH;
+`endif
 
 endmodule

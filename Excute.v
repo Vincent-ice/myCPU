@@ -1,27 +1,32 @@
+`timescale 1ns / 1ps
 `include "Defines.vh"
 module Excute (
     input                       clk,
     input                       rstn,
-    // 级间握手信号
+
     input                       M_allowin,
     output                      E_allowin,
-    // 级间数据信号
+
     input                       DE_valid,
     input   [`DE_BUS_Wid-1:0]   DE_BUS,
     
     output                      EM_valid,
     output  [`EM_BUS_Wid-1:0]   EM_BUS,
-    // 数据前推信号
+
     output  [`ED_for_BUS_Wid-1:0]   ED_for_BUS,
     output  [13:0]              csr_raddr_forward,
     input   [31:0]              csr_rdata_forward,
-    // 例外处理
+
+    input   [`CSR2FE_BUS_Wid-1:0]      CSR2FE_BUS,
+    input   [`CSR2TLB_BUS_DE_Wid-1:0]  CSR2TLB_BUS_D,
+    output  [`CSR2TLB_BUS_EM_Wid-1:0]  CSR2TLB_BUS,
+    output  [`TLB2CSR_BUS_EM_Wid-1:0]  TLB2CSR_BUS,
+
     output                      ex_E,
     input                       ex_en,
-    // 分支预测错误信号
     output                      predict_error,
     output  [`Branch_BUS_Wid-1:0]  Branch_BUS,
-    // data sram相关
+
     output                      data_sram_req,
     output reg [ 3:0]           data_sram_wstrb,
     output  [31:0]              data_sram_addr,
@@ -30,7 +35,25 @@ module Excute (
     input   [31:0]              data_sram_rdata,
     input                       data_sram_addr_ok,
     input                       data_sram_data_ok,
-    output                      data_sram_wr
+    output                      data_sram_wr,
+
+`ifdef DIFFTEST_EN
+    output [`DIFFTEST_RAM_BUS_Wid-1:0] difftest_ram_BUS,
+`endif
+
+    // search port 1 (for load/store)
+    output wire                      st_inst, //to update dirty bit
+    output wire [              18:0] s1_vppn,
+    output wire                      s1_va_bit12,
+    output wire [               9:0] s1_asid,
+    input  wire                      s1_found,
+    input  wire [$clog2(`TLBNUM)-1:0]s1_index,
+    input  wire [              19:0] s1_ppn,
+    input  wire [               5:0] s1_ps,
+    input  wire [               1:0] s1_plv,
+    input  wire [               1:0] s1_mat,
+    input  wire                      s1_d,
+    input  wire                      s1_v
 );
     
 //DE BUS
@@ -67,6 +90,7 @@ assign {inst_E,inst_b,inst_bl,inst_jirl,br_base,predict_taken,predict_target,ins
         pc_E,alu_op_E,alu_src1_E,alu_src2_E,rkd_value_E,gr_we_E,mem_we_E,dest_E,res_from_mem_E,
         ex_D,ecode_D,esubcode_D,csr_addr_E,csr_we_E,csr_rdata_E,csr_wmask_E,csr_wdata_E,res_from_csr_E} = DE_BUS_E;
 
+reg  [`CSR2TLB_BUS_DE_Wid-1:0] CSR2TLB_BUS_E;
 //pipeline handshake
 reg    E_valid;
 reg    ex_flag;
@@ -77,12 +101,15 @@ wire   E_ready_go     = E_valid && !send_handshake && !data_sram_req || data_sra
 always @(posedge clk) begin
     if (!rstn) begin
         DE_BUS_E <= 'b0;
+        CSR2TLB_BUS_E <= 'b0;
     end
     else if (ex_en) begin
         DE_BUS_E <= 'b0;
+        CSR2TLB_BUS_E <= 'b0;
     end
     else if (DE_valid && E_allowin) begin
         DE_BUS_E <= DE_BUS;
+        CSR2TLB_BUS_E <= CSR2TLB_BUS_D;
     end
 end
 always @(posedge clk) begin
@@ -97,7 +124,7 @@ always @(posedge clk) begin
     end
 end
 
-always @(posedge clk) begin // 记录是否存在成功发送的data sram访问请求
+always @(posedge clk) begin
     if (!rstn) begin
         send_handshake <= 1'b0;
     end
@@ -122,9 +149,91 @@ alu u_alu(
     .alu_result   (alu_result_E),
     .stall        (stall       )
     );
+//address translation
+wire [31:0] vaddr;
+wire        inst_tlbsrch;
+wire        inst_tlbrd;
+wire        inst_tlbwr;
+wire        inst_tlbfill;
+wire        inst_invtlb;
+wire [ 4:0] invop;
+wire        wen;
+wire [$clog2(`TLBNUM)-1:0] w_index;
+wire        w_e;
+wire [18:0] w_vppn;
+wire [ 5:0] w_ps;
+wire [ 9:0] w_asid;
+wire        w_g;
+wire [19:0] w_ppn0;
+wire [ 1:0] w_plv0;
+wire [ 1:0] w_mat0;
+wire        w_d0;
+wire        w_v0;
+wire [19:0] w_ppn1;
+wire [ 1:0] w_plv1;
+wire [ 1:0] w_mat1;
+wire        w_d1;
+wire        w_v1;
+wire [$clog2(`TLBNUM)-1:0] r_index;
+
+assign {inst_tlbsrch,inst_tlbrd,inst_tlbwr,inst_tlbfill,inst_invtlb,invop,wen,w_index,w_e,w_vppn,w_ps,w_asid,w_g,
+        w_ppn0,w_plv0,w_mat0,w_d0,w_v0,w_ppn1,w_plv1,w_mat1,w_d1,w_v1,r_index} = CSR2TLB_BUS_E;
+
+wire [ 9:0] csr_ASID_ASID;
+wire        csr_CRMD_DA;
+wire        csr_CRMD_PG;
+wire [ 1:0] csr_CRMD_PLV;
+wire        csr_DMW0_PLV0;
+wire        csr_DMW0_PLV3;
+wire [ 2:0] csr_DMW0_VSEG;
+wire [ 2:0] csr_DMW0_PSEG;
+wire        csr_DMW1_PLV0;
+wire        csr_DMW1_PLV3;
+wire [ 2:0] csr_DMW1_VSEG;
+wire [ 2:0] csr_DMW1_PSEG;
+assign {csr_ASID_ASID,csr_CRMD_DA,csr_CRMD_PG,csr_CRMD_PLV,
+        csr_DMW0_PLV0,csr_DMW0_PLV3,csr_DMW0_VSEG,csr_DMW0_PSEG,
+        csr_DMW1_PLV0,csr_DMW1_PLV3,csr_DMW1_VSEG,csr_DMW1_PSEG} = CSR2FE_BUS;
+
+wire        da_hit;
+wire        dmw0_hit;
+wire        dmw1_hit;
+wire        dmw_hit = dmw0_hit || dmw1_hit;
+// TLB search
+assign vaddr = alu_result_E;
+wire [31:0] paddr;
+wire [21:0] offset = vaddr[21:0];
+
+assign s1_vppn     = inst_invtlb  ? alu_src2_E[31:13] :
+                     inst_tlbsrch ? w_vppn            : 
+                     vaddr[31:13];
+assign s1_va_bit12 = inst_invtlb  ? alu_src2_E[12]    :
+                     inst_tlbsrch ? 1'b0              :
+                     vaddr[12];
+assign s1_asid     = inst_invtlb  ? alu_src1_E[9:0]   :
+                     csr_ASID_ASID;
+assign st_inst     = data_sram_req && data_sram_wr;
+
+wire [31:0] tlb_addr = (s1_ps == 6'd12) ? {s1_ppn[19:0], offset[11:0]} :
+                                          {s1_ppn[19:10], offset[21:0]};
+
+assign da_hit = (csr_CRMD_DA == 1) && (csr_CRMD_PG == 0);
+
+// DMW
+assign dmw0_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW0_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW0_PLV3 ) && (vaddr[31:29] == csr_DMW0_VSEG); 
+assign dmw1_hit = (csr_CRMD_PLV == 2'b00 && csr_DMW1_PLV0   ||
+                   csr_CRMD_PLV == 2'b11 && csr_DMW1_PLV3 ) && (vaddr[31:29] == csr_DMW1_VSEG); 
+
+wire [31:0] dmw_addr = {32{dmw0_hit}} & {csr_DMW0_PSEG, vaddr[28:0]} |
+                       {32{dmw1_hit}} & {csr_DMW1_PSEG, vaddr[28:0]};
+
+// PADDR
+assign paddr = da_hit  ? vaddr    :
+               dmw_hit ? dmw_addr :
+                         tlb_addr ;
 
 //data sram manage
-wire [31:0] vaddr_E = alu_result_E;
 wire        req = E_valid && !ex_E && !send_handshake && (|mem_we_E || |res_from_mem_E);
 reg         req_reg;
 always @(posedge clk) begin
@@ -141,7 +250,7 @@ end
 assign data_sram_req = (req | req_reg);
 
 always @(*) begin
-    case ({mem_we_E,vaddr_E[1:0]})
+    case ({mem_we_E,vaddr[1:0]})
         6'b0001_00 : {data_sram_wstrb,data_sram_size} = 6'b0001_00;
         6'b0001_01 : {data_sram_wstrb,data_sram_size} = 6'b0010_00;
         6'b0001_10 : {data_sram_wstrb,data_sram_size} = 6'b0100_00;
@@ -158,7 +267,7 @@ always @(*) begin
     endcase
 end
 
-assign data_sram_addr  = vaddr_E;
+assign data_sram_addr  = paddr;
 
 always @(*) begin
     case (mem_we_E)
@@ -169,14 +278,30 @@ always @(*) begin
     endcase
 end
 assign data_sram_wr = (|mem_we_E);
+
 //exception manage
-wire        ALE        = ((mem_we_E[3] | res_from_mem_E[3])&(|data_sram_addr[1:0])) ||
-                         ((mem_we_E[1] | res_from_mem_E[1])&( data_sram_addr[0]  ));
-assign      ex_E       = E_valid && (ex_D | ALE);
+wire        ex_ALE     = ((mem_we_E[3] | res_from_mem_E[3])&(|vaddr[1:0])) ||
+                         ((mem_we_E[1] | res_from_mem_E[1])&( vaddr[0]  ));
+wire        ex_TLBR    = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & ~s1_found;
+wire        ex_PIL     = ~da_hit & ~dmw_hit & res_from_mem_E & s1_found & ~s1_v;
+wire        ex_PIS     = ~da_hit & ~dmw_hit & mem_we_E & s1_found & ~s1_v;
+wire        ex_PPI     = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & s1_found & s1_v & csr_CRMD_PLV == 2'b11 && s1_plv == 2'b00;            
+wire        ex_PME     = ~da_hit & ~dmw_hit & mem_we_E & s1_found & s1_v & ~ex_PPI & ~s1_d;
+wire        ex_ADEM    = ~da_hit & ~dmw_hit & (mem_we_E | res_from_mem_E) & csr_CRMD_PLV == 2'b11 & vaddr[31];
+
+assign      ex_E       = E_valid && (ex_D | ex_ALE | ex_TLBR | ex_PIL | ex_PIS | ex_PME | ex_PPI | ex_ADEM);
 wire [7:0]  ecode_E    = ~E_valid ? 8'h00       :
                          ex_D     ? ecode_D     :
-                         ALE      ? `ECODE_ALE  : 8'b0;
-wire        esubcode_E = ex_D     ? esubcode_D  : 1'b0;
+                         ex_ALE   ? `ECODE_ALE  :
+                         ex_TLBR  ? `ECODE_TLBR :
+                         ex_PIL   ? `ECODE_PIL  :
+                         ex_PIS   ? `ECODE_PIS  :
+                         ex_PME   ? `ECODE_PME  :
+                         ex_PPI   ? `ECODE_PPI  :
+                         ex_ADEM  ? `ECODE_ADEM : 8'b0;
+wire        esubcode_E = ex_D     ? esubcode_D  :
+                         ex_ADEM  ? 1'b1        : 1'b0;
+wire [31:0] badvaddr   = ex_D     ? pc_E        : vaddr;
 
 always @(posedge clk) begin
     if (!rstn) begin
@@ -207,6 +332,7 @@ wire rj_eq_rd = (alu_src1_E == alu_src2_E);
 wire rj_lt_rd = ($signed(alu_src1_E) < $signed(alu_src2_E));
 wire rj_ltu_rd= (alu_src1_E < alu_src2_E);
 reg  br_taken;
+wire br_target_error;
 wire [31:0] pc_E_plus4;
 wire [31:0] br_PC;
 wire [31:0] br_target_final;
@@ -244,17 +370,17 @@ assign csr_raddr_forward = csr_we_E ? csr_addr_E : 14'b0;
 assign csr_wdata_final = (csr_wdata_E & csr_wmask_E) | (~csr_wmask_E & csr_rdata_forward);
 
 //EM BUS
-assign EM_BUS = {PB_BUS_E,          //261:195       分支预测更新用总线
-                 pc_E,              //194:163       pc
-                 rf_wdata_E,        //162:131       regfile写数据
-                 gr_we_E,           //130           regfile写使能
-                 dest_E,            //129:125       regfile写目的寄存器号
-                 res_from_mem_E,    //124:121       ld入regfile控制
-                 data_sram_addr,    //120:89        data sram地址用于例外处理
-                 ex_E,              //88            例外相关信号
+assign EM_BUS = {PB_BUS_E,          //261:195
+                 pc_E,              //194:163
+                 rf_wdata_E,        //162:131
+                 gr_we_E,           //130
+                 dest_E,            //129:125
+                 res_from_mem_E,    //124:121
+                 badvaddr,             //120:89
+                 ex_E,              //88
                  ecode_E,           //87:80
                  esubcode_E,        //79
-                 csr_addr_E,        //78:65         csr相关信号
+                 csr_addr_E,        //78:65
                  csr_we_E,          //64
                  csr_wmask_E,       //63:32
                  csr_wdata_final};      //31:0
@@ -267,5 +393,27 @@ assign ED_for_BUS = {res_from_mem_E,                    //119:116
                      csr_addr_E,                        //77:64
                      csr_wmask_E,                       //63:32
                      csr_wdata_final};                      //31:0
+
+//TLB BUS
+assign CSR2TLB_BUS = CSR2TLB_BUS_E;
+assign TLB2CSR_BUS = {s1_found,s1_index}; 
+
+`ifdef DIFFTEST_EN
+// for difftest
+wire [7:0] st_valid = {4'b0, 1'b0, mem_we_E[3], (!mem_we_E[3])&&mem_we_E[1], (!mem_we_E[3])&&(!mem_we_E[1])&&mem_we_E[0]};
+reg  [7:0] ld_valid;
+always @(*) begin
+    case (res_from_mem_E)
+        4'b0001 : ld_valid = 8'b00000001;
+        4'b0101 : ld_valid = 8'b00000010;
+        4'b0011 : ld_valid = 8'b00000100;
+        4'b0111 : ld_valid = 8'b00001000;
+        4'b1111 : ld_valid = 8'b00010000;
+        default : ld_valid = 8'b0;
+    endcase
+end
+assign difftest_ram_BUS = {st_valid,ld_valid,vaddr,paddr,data_sram_wdata};
+`endif
+
 
 endmodule

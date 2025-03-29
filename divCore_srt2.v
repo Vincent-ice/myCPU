@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 module divCore_srt2(
 	input			  clk,
 	input			  rstn,

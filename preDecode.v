@@ -1,28 +1,26 @@
 `timescale 1ns / 1ps
 `include "Defines.vh"
-module preDecode (              // pD级的预测实际上有问题，分支预测不需要单独一级，其应该直接利用pc值进行预测，与nextPC生成在相同时间段内完成
+module preDecode (
     input                       clk,
 (*max_fanout = 40*)    input                       rstn,
 
-    // 级间数据信号
     input                       FpD_valid,
     input  [`FpD_BUS_Wid-1:0]   FpD_BUS,
 
     output                      pDD_valid,
     output [`pDD_BUS_Wid-1:0]   pDD_BUS,
 
-    // 级间握手信号
     input                       D_allowin,
     output                      pD_allowin,
 
-    output [`predict_BUS_Wid-1:0]predict_BUS,       // 分支预测总线 to F
-    input  [`PB_BUS_Wid-1:0]    PB_BUS,             // 分支预测更新总线 from Wb，采取指令执行完毕更新以防止预测错误带来的回滚
+    output [`predict_BUS_Wid-1:0]predict_BUS,
+    input  [`PB_BUS_Wid-1:0]    PB_BUS,
 
-    input                       predict_error,      // 预测错误信号 from E
-    input                       ertn_flush,         // ertn指令刷新信号 from D
+    input                       predict_error,
+    input                       ertn_flush,
     input                       ex_D,
     input                       ex_E,
-    input                       ex_en               // 例外处理使能信号
+    input                       ex_en
 );
 
 //FpD BUS
@@ -73,7 +71,7 @@ always @(posedge clk) begin
     
 end
 
-// 解码将指令区分为直接和间接跳转
+
 wire [ 5:0] op_31_26 = inst_pD[31:26];
 wire [63:0] op_31_26_d;
 decoder_6_64 u_dec0(.in(op_31_26 ), .out(op_31_26_d ));
@@ -135,11 +133,11 @@ reg  [`BHR_Wid-1:0] BHT [2**`BHT_INDEX_Wid-1:0];         // use PC's 5-bit hash 
 reg  [1:0]          PHT [2**`BHR_Wid-1:0];
 wire [`BHT_INDEX_Wid-1:0] BHT_index;
 wire [`BHR_Wid-1:0] PHT_index;
-hash_function #(`BHT_INDEX_Wid) u_hash_function(.data_in(pc_pD),.hash_out(BHT_index));  // 哈希算法本身不重要，只要能够将pc值映射到BHT的index即可
+hash_function #(`BHT_INDEX_Wid) u_hash_function(.data_in(pc_pD),.hash_out(BHT_index));
 
 wire [`BHT_INDEX_Wid-1:0] BHT_index_W;
 hash_function #(`BHT_INDEX_Wid) u_hash_function_W(.data_in(pc_W),.hash_out(BHT_index_W));
-wire [`BHR_Wid-1:0] PHT_index_W = BHT[BHT_index_W] ^ pc_W[`BHT_INDEX_Wid+1:2];
+wire [`BHR_Wid-1:0] PHT_index_W = BHT[BHT_index_W] ^ pc_W[`BHT_INDEX_Wid-1:0];
 wire [1:0]          PHT_wdata;
 bimodal_predictor u_bimodal_predictor(.data_i(PHT[PHT_index_W]),.taken(br_taken_W),.data_o(PHT_wdata));
 always @(posedge clk) begin
@@ -157,7 +155,7 @@ always @(posedge clk) begin
     end
 end
 
-assign PHT_index = BHT[BHT_index] ^ pc_pD[`BHT_INDEX_Wid+1:2];   // use xor to avoid aliasing
+assign PHT_index = BHT[BHT_index] ^ pc_pD[`BHT_INDEX_Wid-1:0];   // use xor to avoid aliasing
 
 // Target Cache
 reg  [31:0] TC_PC [`TC_NUM-1:0];
@@ -209,7 +207,7 @@ assign pDD_BUS = {pc_pD,            //180:149
                   ex_pD,            //115
                   ecode_pD,         //114:107
                   esubcode_pD,      //106
-                  op_31_26_d,       //105:42    将部分译码结果传递给下一级
+                  op_31_26_d,       //105:42
                   inst_jirl,        //41
                   inst_b,           //40
                   inst_bl,          //39
@@ -219,7 +217,7 @@ assign pDD_BUS = {pc_pD,            //180:149
                   inst_bge,         //35
                   inst_bltu,        //34    
                   inst_bgeu,        //33
-                  predict_taken,    //32        分支预测结果，用于判断是否错误
+                  predict_taken,    //32
                   predict_target};  //31:0
 endmodule
 

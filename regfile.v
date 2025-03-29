@@ -1,5 +1,9 @@
+`timescale 1ns / 1ps
 module regfile(
     input  wire        clk,
+`ifdef DIFFTEST_EN
+    output [31:0] reg_diff [31:0],
+`endif
     // READ PORT 1
     input  wire [ 4:0] raddr1,
     output wire [31:0] rdata1,
@@ -23,5 +27,9 @@ assign rdata1 = (raddr1==5'b0) ? 32'b0 : rf[raddr1];
 
 //READ OUT 2
 assign rdata2 = (raddr2==5'b0) ? 32'b0 : rf[raddr2];
+
+`ifdef DIFFTEST_EN
+    assign reg_diff = rf;
+`endif
 
 endmodule

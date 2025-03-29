@@ -5,7 +5,7 @@
 `define MW_BUS_Wid      `WpD_BUS_Wid+32+32+1+5+32+1+8+1+14+1+32+32
 `define predict_BUS_Wid 1+32
 `define Branch_BUS_Wid  32+1
-`define Wrf_BUS_Wid     32+5+32
+`define Wrf_BUS_Wid     1+5+32
 `define Wcsr_BUS_Wid    1+8+1+1+14+32+32+32+32
 `define WpD_BUS_Wid     32+1+1+1+32
 `define PB_BUS_Wid      `WpD_BUS_Wid+32
@@ -15,6 +15,16 @@
 `define alu_op_Wid      19
 
 `define TLBNUM          16
+`define CSR2TLB_BUS_Wid    1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1+$clog2(`TLBNUM)
+`define CSR2TLB_BUS_DE_Wid 5+5+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1+$clog2(`TLBNUM)
+`define CSR2TLB_BUS_EM_Wid `CSR2TLB_BUS_DE_Wid
+`define CSR2TLB_BUS_MW_Wid 1+5+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_Wid    4+1+$clog2(`TLBNUM)+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_EM_Wid 1+$clog2(`TLBNUM)
+`define TLB2CSR_BUS_MW_Wid 4+`TLB2CSR_BUS_EM_Wid+1+19+6+10+1+20+2+2+1+1+20+2+2+1+1
+`define TLB2CSR_BUS_WD_Wid `TLB2CSR_BUS_MW_Wid
+
+`define CSR2FE_BUS_Wid  10+1+1+2+1+1+3+3+1+1+3+3
 
 `define ECODE_PIL       8'h01
 `define ECODE_PIS       8'h02
@@ -46,8 +56,13 @@
 `define ESUBCODE_WPEM   1'b1
 `define ECODE_ERTN      8'h14
 `define ECODE_INT       8'h0
+`define ECODE_TLBR      8'h3f
 
 `define BTB_NUM         16
 `define BHR_Wid         4
 `define BHT_INDEX_Wid   5
 `define TC_NUM          2**`BHR_Wid
+
+`ifdef DIFFTEST_EN
+    `define DIFFTEST_RAM_BUS_Wid 8+8+32+32+32
+`endif
